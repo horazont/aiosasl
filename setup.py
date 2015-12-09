@@ -22,11 +22,9 @@ setup(
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
-        "Operating System :: POSIX",
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3.3",
         "Programming Language :: Python :: 3.4",
-        "Topic :: Communications :: Chat",
     ],
     keywords="asyncio sasl library",
     packages=find_packages(exclude=["tests*"])
