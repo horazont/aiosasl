@@ -13,7 +13,7 @@ import aiosasl
 setup(
     name="aiosasl",
     version=aiosasl.__version__,
-    description="Pure-python SASL library for asyncio",
+    description="Pure-python, protocol agnostic SASL library for asyncio",
     long_description=long_description,
     url="https://github.com/horazont/aiosasl",
     author="Jonas Wielicki",
