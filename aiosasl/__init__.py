@@ -69,6 +69,22 @@ SASL state machine
 
 .. autoclass:: SASLStateMachine
 
+Exception classes
+=================
+
+.. autoclass:: SASLError
+
+.. autoclass:: SASLFailure
+
+.. autoclass:: AuthenticationFailure
+
+Version information
+===================
+
+.. autodata:: __version__
+
+.. autodata:: version_info
+
 """
 
 import abc
@@ -86,6 +102,19 @@ import time
 from aiosasl.stringprep import saslprep
 
 logger = logging.getLogger(__name__)
+
+#: The imported :mod:`aiosasl` version as a tuple.
+#:
+#: The components of the tuple are, in order: `major version`, `minor version`,
+#: `patch level`, and `pre-release identifier`.
+version_info = (0, 1, 0, None)
+
+#: The imported :mod:`aiosasl` version as a string.
+#:
+#: The version number is dot-separated; in pre-release or development versions,
+#: the version number is followed by a hypen-separated pre-release identifier.
+__version__ = ".".join(map(str, version_info[:3]))
+
 
 _system_random = random.SystemRandom()
 
@@ -143,6 +172,30 @@ except ImportError:
 
 
 class SASLError(Exception):
+    """
+    Base class for a SASL related error. `opaque_error` may be anything but
+    :data:`None` which helps your application re-identify the error at the
+    outer layers. `kind` is a string which helps identifying the class of the
+    error; this is set implicitly by the constructors of :class:`SASLFailure`
+    and :class:`AuthenticationFailure`, which you are encouraged to use.
+
+    `text` may be a human-readable string describing the error condition in
+    more detail.
+
+    `opaque_error` is set to :data:`None` by :class:`SASLMechanism`
+    implementations to indicate errors which originate from the local mechanism
+    implementation.
+
+    .. attribute:: opaque_error
+
+       The value passed to the respective constructor argument.
+
+    .. attribute:: text
+
+       The value passed to the respective constructor argument.
+
+    """
+
     def __init__(self, opaque_error, kind, text=None):
         msg = "{}: {}".format(opaque_error, kind)
         if text:
@@ -153,6 +206,11 @@ class SASLError(Exception):
 
 
 class SASLFailure(SASLError):
+    """
+    A SASL protocol failure which is unrelated to the credentials passed. This
+    may be raised by :class:`SASLInterface` methods.
+    """
+
     def __init__(self, opaque_error, text=None):
         super().__init__(opaque_error, "SASL failure", text=text)
 
@@ -163,6 +221,11 @@ class SASLFailure(SASLError):
 
 
 class AuthenticationFailure(SASLError):
+    """
+    A SASL error which indicates that the provided credentials are
+    invalid. This may be raised by :class:`SASLInterface` methods.
+    """
+
     def __init__(self, opaque_error, text=None):
         super().__init__(opaque_error, "authentication failed", text=text)
 
@@ -402,7 +465,7 @@ class PLAIN(SASLMechanism):
 
         if state != "success":
             raise SASLFailure(
-                "malformed-request",
+                None,
                 text="SASL protocol violation")
 
         return True
@@ -524,12 +587,14 @@ class SCRAM(SASLMechanism):
         except (ValueError, KeyError):
             yield from sm.abort()
             raise SASLFailure(
-                "Malformed server message: {!r}".format(payload))
+                None,
+                text="malformed server message: {!r}".format(payload))
 
         if not nonce.startswith(our_nonce):
             yield from sm.abort()
             raise SASLFailure(
-                "Server nonce doesn't fit our nonce")
+                None,
+                text="server nonce doesn't fit our nonce")
 
         t0 = time.time()
 
@@ -586,6 +651,7 @@ class SCRAM(SASLMechanism):
 
         if base64.b64decode(payload[b"v"]) != server_signature:
             raise SASLFailure(
-                "Authentication successful, but server signature invalid")
+                None,
+                "authentication successful, but server signature invalid")
 
         return True

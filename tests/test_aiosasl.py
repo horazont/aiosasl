@@ -256,7 +256,7 @@ class TestPLAIN(unittest.TestCase):
             asyncio.get_event_loop().run_until_complete(run())
 
         self.assertEqual(
-            "malformed-request",
+            None,
             ctx.exception.opaque_error
         )
 
@@ -448,8 +448,10 @@ class TestSCRAM(unittest.TestCase):
                  "failure", ("aborted", None))
             ]))
 
-        with self.assertRaisesRegexp(aiosasl.SASLFailure, "nonce"):
+        with self.assertRaisesRegexp(aiosasl.SASLFailure, "nonce") as ctx:
             self._run(smmock)
+
+        self.assertIsNone(ctx.exception.opaque_error)
 
     def test_invalid_signature(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
@@ -469,6 +471,7 @@ class TestSCRAM(unittest.TestCase):
         with self.assertRaises(aiosasl.SASLFailure) as ctx:
             self._run(smmock)
 
+        self.assertIsNone(ctx.exception.opaque_error)
         self.assertIn(
             "signature",
             str(ctx.exception).lower()
