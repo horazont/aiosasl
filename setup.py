@@ -13,7 +13,7 @@ import aiosasl
 setup(
     name="aiosasl",
     version=aiosasl.__version__,
-    description="Pure-python SASL library for asyncio",
+    description="Pure-python, protocol agnostic SASL library for asyncio",
     long_description=long_description,
     url="https://github.com/horazont/aiosasl",
     author="Jonas Wielicki",
@@ -22,11 +22,11 @@ setup(
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
-        "Operating System :: POSIX",
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3.3",
         "Programming Language :: Python :: 3.4",
-        "Topic :: Communications :: Chat",
+        "Programming Language :: Python :: 3.5",
+        "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
     ],
     keywords="asyncio sasl library",
     packages=find_packages(exclude=["tests*"])
