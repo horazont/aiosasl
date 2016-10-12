@@ -23,7 +23,8 @@ import unittest
 
 from aiosasl.stringprep import (
     saslprep,
-    check_bidi
+    check_bidi,
+    trace,
 )
 
 
@@ -103,3 +104,64 @@ class TestSASLprep(unittest.TestCase):
         self.assertEqual(
             "\u0221",
             saslprep("\u0221", allow_unassigned=True))
+
+
+class Testtrace(unittest.TestCase):
+    def test_identity_rfcx(self):
+        self.assertEqual(
+            "user",
+            trace("user"),
+            "trace requirement: identity transform")
+
+    def test_case_preservation_rfcx(self):
+        self.assertEqual(
+            "USER",
+            trace("USER"),
+            "trace requirement: preserve case")
+
+    def test_prohibited_character_rfcx(self):
+        with self.assertRaises(
+                ValueError,
+                msg="trace requirement: prohibited character (C.2.1)"):
+            trace("\u0007")
+
+        with self.assertRaises(
+                ValueError,
+                msg="trace requirement: prohibited character (C.2.2)"):
+            trace("\u070F")
+
+        with self.assertRaises(
+                ValueError,
+                msg="trace requirement: prohibited character (C.3)"):
+            trace("\uE000")
+
+        with self.assertRaises(
+                ValueError,
+                msg="trace requirement: prohibited character (C.4)"):
+            trace("\uFDEF")
+
+        with self.assertRaises(
+                ValueError,
+                msg="trace requirement: prohibited character (C.5)"):
+            trace("\uD800")
+
+        with self.assertRaises(
+                ValueError,
+                msg="trace requirement: prohibited character (C.6)"):
+            trace("\uFFF9")
+
+        with self.assertRaises(
+                ValueError,
+                msg="trace requirement: prohibited character (C.8)"):
+            trace("\u0340")
+
+        with self.assertRaises(
+                ValueError,
+                msg="trace requirement: prohibited character (C.9)"):
+            trace("\U000E0001")
+
+    def test_bidirectional_check_rfcx(self):
+        with self.assertRaises(
+                ValueError,
+                msg="trace requirement: bidirectional check"):
+            trace("\u0627\u0031")

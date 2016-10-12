@@ -177,3 +177,25 @@ def saslprep(string, allow_unassigned=False):
         )
 
     return "".join(chars)
+
+
+def trace(string):
+    """
+    Implement the ``trace`` profile specified in :rfc:`4505`.
+    """
+
+    check_prohibited_output(
+        string,
+        (
+            stringprep.in_table_c21,
+            stringprep.in_table_c22,
+            stringprep.in_table_c3,
+            stringprep.in_table_c4,
+            stringprep.in_table_c5,
+            stringprep.in_table_c6,
+            stringprep.in_table_c8,
+            stringprep.in_table_c9,
+        )
+    )
+    check_bidi(string)
+    return string
