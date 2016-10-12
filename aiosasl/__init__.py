@@ -128,7 +128,7 @@ logger = logging.getLogger(__name__)
 #:
 #: The components of the tuple are, in order: `major version`, `minor version`,
 #: `patch level`, and `pre-release identifier`.
-version_info = (0, 2, 0, "a0")
+version_info = (0, 3, 0, "a0")
 
 #: The imported :mod:`aiosasl` version as a string.
 #:
