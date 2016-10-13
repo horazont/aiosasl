@@ -619,3 +619,58 @@ class TestSCRAM(unittest.TestCase):
     def tearDown(self):
         import random
         aiosasl._system_random = random.SystemRandom()
+
+
+class TestANONYMOUS(unittest.TestCase):
+    def test_accepts_ANONYMOUS(self):
+        self.assertIsNotNone(
+            aiosasl.ANONYMOUS.any_supported(["ANONYMOUS"])
+        )
+
+    def test_passes_token_through_trace(self):
+        with unittest.mock.patch("aiosasl.trace") as trace:
+            trace.return_value = "traced"
+
+            anon = aiosasl.ANONYMOUS(unittest.mock.sentinel.token)
+
+        trace.assert_called_with(unittest.mock.sentinel.token)
+
+        smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
+            self,
+            [
+                ("auth;ANONYMOUS",
+                 b"traced",
+                 "success",
+                 None)
+            ]))
+
+        def run():
+            result = yield from anon.authenticate(
+                smmock,
+                "ANONYMOUS")
+            self.assertTrue(result)
+
+        asyncio.get_event_loop().run_until_complete(run())
+
+        smmock.interface.finalize()
+
+    def test_simply_sends_token(self):
+        smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
+            self,
+            [
+                ("auth;ANONYMOUS",
+                 b"sirhc",
+                 "success",
+                 None)
+            ]))
+
+        def run():
+            anon = aiosasl.ANONYMOUS("sirhc")
+            result = yield from anon.authenticate(
+                smmock,
+                "ANONYMOUS")
+            self.assertTrue(result)
+
+        asyncio.get_event_loop().run_until_complete(run())
+
+        smmock.interface.finalize()

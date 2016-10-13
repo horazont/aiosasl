@@ -9,3 +9,11 @@ Dependencies
 ------------
 
 * Python ≥ 3.4 (or Python = 3.3 with tulip)
+
+Supported SASL mechanisms
+-------------------------
+
+* ``PLAIN``: authenticate with plaintext password (RFC 4616)
+* ``ANONYMOUS``: anonymous "authentication" (RFC 4505)
+* ``SCRAM-SHA-1``, ``SCRAM-SHA-224``, , ``SCRAM-SHA-512``, ``SCRAM-SHA-384``,
+  and ``SCRAM-SHA-256``: Salted Challenge Response Authentication (RFC 5802)

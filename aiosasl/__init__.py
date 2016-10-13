@@ -80,6 +80,8 @@ SASL mechansims
 
 .. autoclass:: SCRAM
 
+.. autoclass:: ANONYMOUS
+
 Base class
 ----------
 
@@ -120,7 +122,9 @@ import operator
 import random
 import time
 
-from aiosasl.stringprep import saslprep
+from aiosasl.stringprep import saslprep, trace
+
+from .version import version, __version__, version_info  # NOQA
 
 logger = logging.getLogger(__name__)
 
@@ -128,13 +132,13 @@ logger = logging.getLogger(__name__)
 #:
 #: The components of the tuple are, in order: `major version`, `minor version`,
 #: `patch level`, and `pre-release identifier`.
-version_info = (0, 2, 1, None)
+version_info = version_info
 
 #: The imported :mod:`aiosasl` version as a string.
 #:
 #: The version number is dot-separated; in pre-release or development versions,
 #: the version number is followed by a hypen-separated pre-release identifier.
-__version__ = ".".join(map(str, version_info[:3]))
+__version__ = __version__
 
 
 _system_random = random.SystemRandom()
@@ -451,7 +455,7 @@ class SASLMechanism(metaclass=abc.ABCMeta):
 
 class PLAIN(SASLMechanism):
     """
-    The password-based ``PLAIN`` SASL mechanism (see RFC 4616).
+    The password-based ``PLAIN`` SASL mechanism (see :rfc:`4616`).
 
     .. warning::
 
@@ -494,7 +498,7 @@ class PLAIN(SASLMechanism):
 
 class SCRAM(SASLMechanism):
     """
-    The password-based SCRAM (non-PLUS) SASL mechanism (see RFC 5802).
+    The password-based SCRAM (non-PLUS) SASL mechanism (see :rfc:`5802`).
 
     .. note::
 
@@ -674,5 +678,39 @@ class SCRAM(SASLMechanism):
             raise SASLFailure(
                 None,
                 "authentication successful, but server signature invalid")
+
+        return True
+
+
+class ANONYMOUS(SASLMechanism):
+    """
+    The ANONYMOUS SASL mechanism (see :rfc:`4505`).
+
+    .. versionadded:: 0.3
+    """
+
+    def __init__(self, token):
+        super().__init__()
+        self._token = trace(token).encode("utf-8")
+
+    @classmethod
+    def any_supported(self, mechanisms):
+        if "ANONYMOUS" in mechanisms:
+            return "ANONYMOUS"
+        return None
+
+    @asyncio.coroutine
+    def authenticate(self, sm, mechanism):
+        logger.info("attempting ANONYMOUS mechanism")
+
+        state, _ = yield from sm.initiate(
+            mechanism="ANONYMOUS",
+            payload=self._token
+        )
+
+        if state != "success":
+            raise SASLFailure(
+                None,
+                text="SASL protocol violation")
 
         return True
