@@ -124,19 +124,21 @@ import time
 
 from aiosasl.stringprep import saslprep, trace
 
+from .version import version, __version__, version_info  # NOQA
+
 logger = logging.getLogger(__name__)
 
 #: The imported :mod:`aiosasl` version as a tuple.
 #:
 #: The components of the tuple are, in order: `major version`, `minor version`,
 #: `patch level`, and `pre-release identifier`.
-version_info = (0, 3, 0, "a0")
+version_info = version_info
 
 #: The imported :mod:`aiosasl` version as a string.
 #:
 #: The version number is dot-separated; in pre-release or development versions,
 #: the version number is followed by a hypen-separated pre-release identifier.
-__version__ = ".".join(map(str, version_info[:3]))
+__version__ = __version__
 
 
 _system_random = random.SystemRandom()
