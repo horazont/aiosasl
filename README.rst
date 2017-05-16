@@ -17,3 +17,9 @@ Supported SASL mechanisms
 * ``ANONYMOUS``: anonymous "authentication" (RFC 4505)
 * ``SCRAM-SHA-1``, ``SCRAM-SHA-224``, , ``SCRAM-SHA-512``, ``SCRAM-SHA-384``,
   and ``SCRAM-SHA-256``: Salted Challenge Response Authentication (RFC 5802)
+
+Documentation
+-------------
+
+Official documentation can be built with sphinx and is available online
+`on our servers <https://docs.zombofant.net/aiosasl/devel/>`_.
