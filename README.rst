@@ -1,6 +1,12 @@
 ``aiosasl``, pure python generic asyncio SASL library
 #####################################################
 
+.. image:: https://travis-ci.org/horazont/aiosasl.svg?branch=devel
+  :target: https://travis-ci.org/horazont/aiosasl
+
+.. image:: https://coveralls.io/repos/github/horazont/aiosasl/badge.svg?branch=devel
+  :target: https://coveralls.io/github/horazont/aiosasl?branch=devel
+
 ``aiosasl`` provides a generic, asyncio-based SASL library. It can be used with
 any protocol, provided the neccessary interface code is provided by the
 application or protocol implementation.
