@@ -116,13 +116,12 @@ import base64
 import functools
 import hashlib
 import hmac
-import itertools
 import logging
-import operator
 import random
 import time
 
 from aiosasl.stringprep import saslprep, trace
+from aiosasl.utils import xor_bytes
 
 from .version import version, __version__, version_info  # NOQA
 
@@ -182,9 +181,7 @@ except ImportError:
             u_accum = u_prev
             for k in range(1, iterations):
                 u_curr = do_hmac(u_prev)
-                u_accum = bytes(itertools.starmap(
-                    operator.xor,
-                    zip(u_accum, u_curr)))
+                u_accum = xor_bytes(u_accum, u_curr)
                 u_prev = u_curr
 
             return u_accum
@@ -642,14 +639,12 @@ class SCRAM(SASLMechanism):
 
         auth_message += b"," + reply
 
-        client_proof = (
-            int.from_bytes(
-                hmac.new(
-                    stored_key,
-                    auth_message,
-                    hashfun_factory).digest(),
-                "big") ^
-            int.from_bytes(client_key, "big")).to_bytes(digest_size, "big")
+        client_proof = xor_bytes(
+            hmac.new(
+                stored_key,
+                auth_message,
+                hashfun_factory).digest(),
+            client_key)
 
         logger.debug("response generation time: %f seconds", time.time() - t0)
         try:
