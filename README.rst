@@ -22,10 +22,18 @@ Supported SASL mechanisms
 * ``PLAIN``: authenticate with plaintext password (RFC 4616)
 * ``ANONYMOUS``: anonymous "authentication" (RFC 4505)
 * ``SCRAM-SHA-1``, ``SCRAM-SHA-224``, , ``SCRAM-SHA-512``, ``SCRAM-SHA-384``,
-  and ``SCRAM-SHA-256``: Salted Challenge Response Authentication (RFC 5802)
+  and ``SCRAM-SHA-256``: Salted Challenge Response Authentication (RFC 5802),
+  (and the ``-PLUS`` variants with channel binding).
 
 Documentation
 -------------
 
 Official documentation can be built with sphinx and is available online
 `on our servers <https://docs.zombofant.net/aiosasl/devel/>`_.
+
+Supported channel binding methods
+---------------------------------
+
+* ``tls-unique`` and ``tls-server-end-point`` with a pyOpenSSL connection
+* all methods supported by the Python standard library when using the
+  ``ssl`` module

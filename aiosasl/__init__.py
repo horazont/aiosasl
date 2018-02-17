@@ -64,6 +64,7 @@ below:
 
    PLAIN
    SCRAM
+   SCRAMPLUS
 
 Interface for protocols using SASL
 ==================================
@@ -79,6 +80,8 @@ SASL mechansims
 .. autoclass:: PLAIN
 
 .. autoclass:: SCRAM
+
+.. autoclass:: SCRAMPLUS
 
 .. autoclass:: ANONYMOUS
 
@@ -141,6 +144,7 @@ __version__ = __version__
 
 
 _system_random = random.SystemRandom()
+
 
 try:
     from hashlib import pbkdf2_hmac as pbkdf2
@@ -493,28 +497,15 @@ class PLAIN(SASLMechanism):
         return True
 
 
-class SCRAM(SASLMechanism):
+class SCRAMBase:
     """
-    The password-based SCRAM (non-PLUS) SASL mechanism (see :rfc:`5802`).
-
-    .. note::
-
-       As "non-PLUS" suggests, this does not support channel binding. Patches
-       welcome.
-
-       It may make sense to implement the -PLUS mechanisms as separate
-       :class:`SASLMechanism` subclass or at least allow disabling them via an
-       optional argument (defaulting to disabled). Channel binding may not be
-       reliably available in all cases.
-
-    `credential_provider` must be coroutine which returns a ``(user,
-    password)`` tuple.
+    Shared implementation of SCRAM and SCRAMPLUS.
     """
 
-    def __init__(self, credential_provider):
+    def __init__(self, credential_provider, *, nonce_length=15):
         super().__init__()
         self._credential_provider = credential_provider
-        self.nonce_length = 15
+        self.nonce_length = nonce_length
 
     _supported_hashalgos = {
         # the second argument is for preference ordering (highest first)
@@ -534,11 +525,16 @@ class SCRAM(SASLMechanism):
         for mechanism in mechanisms:
             if not mechanism.startswith("SCRAM-"):
                 continue
-            if mechanism.endswith("-PLUS"):
-                # channel binding is not supported
-                continue
 
             hashfun_key = mechanism[6:]
+
+            if cls._channel_binding:
+                if not mechanism.endswith("-PLUS"):
+                    continue
+                hashfun_key = hashfun_key[:-5]
+            else:
+                if mechanism.endswith("-PLUS"):
+                    continue
 
             try:
                 hashfun_name, quality = cls._supported_hashalgos[hashfun_key]
@@ -579,10 +575,8 @@ class SCRAM(SASLMechanism):
         # this is pretty much a verbatim implementation of RFC 5802.
 
         hashfun_factory = functools.partial(hashlib.new, hashfun_name)
-        digest_size = hashfun_factory().digest_size
 
-        # we don’t support channel binding
-        gs2_header = b"n,,"
+        gs2_header = self._get_gs2_header()
         username, password = yield from self._credential_provider()
         username = saslprep(username).encode("utf8")
         password = saslprep(password).encode("utf8")
@@ -594,9 +588,15 @@ class SCRAM(SASLMechanism):
         ))
 
         auth_message = b"n=" + username + b",r=" + our_nonce
-        _, payload = yield from sm.initiate(
+        state, payload = yield from sm.initiate(
             mechanism,
             gs2_header + auth_message)
+
+        if state != "challenge" or payload is None:
+            yield from sm.abort()
+            raise SASLFailure(
+                None,
+                text="protocol violation: expected challenge with payload")
 
         auth_message += b"," + payload
 
@@ -635,7 +635,7 @@ class SCRAM(SASLMechanism):
 
         stored_key = hashfun_factory(client_key).digest()
 
-        reply = b"c=" + base64.b64encode(b"n,,") + b",r=" + nonce
+        reply = b"c=" + base64.b64encode(self._get_cb_data()) + b",r=" + nonce
 
         auth_message += b"," + reply
 
@@ -675,6 +675,94 @@ class SCRAM(SASLMechanism):
                 "authentication successful, but server signature invalid")
 
         return True
+
+
+class SCRAM(SCRAMBase, SASLMechanism):
+    """
+    The password-based SCRAM (non-PLUS) SASL mechanism (see :rfc:`5802`).
+
+    .. note::
+
+       As "non-PLUS" suggests, this does not support channel binding.
+       Use :class:`SCRAMPLUS` if you want channel binding.
+
+
+    `credential_provider` must be coroutine which returns a ``(user,
+    password)`` tuple.
+
+    If this is used after :class:`SCRAMPLUS` in a method list, the
+    keyword argument `after_scram_plus` should be set to
+    :data:`True`. Then we will use the gs2 header ``y,,`` to prevent
+    down-grade attacks by a man-in-the-middle attacker.
+    """
+    _channel_binding = False
+
+    def __init__(self, credential_provider, *, after_scram_plus=False,
+                 **kwargs):
+        super().__init__(credential_provider, **kwargs)
+        self._after_scram_plus = after_scram_plus
+
+    def _get_gs2_header(self):
+        if self._after_scram_plus:
+            return b"y,,"
+        else:
+            return b"n,,"
+
+    def _get_cb_data(self):
+        return self._get_gs2_header()
+
+
+class ChannelBindingProvider(metaclass=abc.ABCMeta):
+    """
+    Interface for a channel binding method.
+
+    The needed external information is supplied to the constructors of
+    the specific instances.
+    """
+
+    @abc.abstractproperty
+    def cb_name(self):
+        """
+        Return the name of the channel-binding mechanism.
+        :rtype: :class:`bytes`
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def extract_cb_data(self):
+        """
+        Return the channel binding data.
+        :returns: the channel binding data
+        :rtype: :class:`bytes`
+        """
+        raise NotImplementedError
+
+
+class SCRAMPLUS(SCRAMBase, SASLMechanism):
+    """
+    The password-based SCRAM-PLUS SASL mechanism (see :rfc:`5802`).
+
+    `credential_provider` must be coroutine which returns a ``(user,
+    password)`` tuple.
+
+    `cb_provider` must be an instance of
+    :class:`ChannelBindingProvider`, which specifies and implements
+    the channel binding type to use.
+    """
+    _channel_binding = True
+
+    def __init__(self, credential_provider, cb_provider,
+                 **kwargs):
+        super().__init__(credential_provider, **kwargs)
+        self._cb_provider = cb_provider
+
+    def _get_gs2_header(self):
+        return b"p=" + self._cb_provider.cb_name + b",,"
+
+    def _get_cb_data(self):
+        gs2_header = self._get_gs2_header()
+        cb_data = self._cb_provider.extract_cb_data()
+        return gs2_header + cb_data
 
 
 class ANONYMOUS(SASLMechanism):
