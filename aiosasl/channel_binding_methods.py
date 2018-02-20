@@ -66,6 +66,11 @@ class TLSUnique(ChannelBindingProvider):
     Provider for the channel binding ``tls-unique`` as specified by
     :rfc:`5929` for :mod:`OpenSSL`.
 
+    .. warning::
+
+       This only supports connections that were not created by session
+       resumption.
+
     :param connection: the SSL connection
     :type connection: :class:`OpenSSL.SSL.Connection`
     """
@@ -105,7 +110,10 @@ class TLSServerEndPoint(ChannelBindingProvider):
 
     def extract_cb_data(self):
         cert = self._connection.get_peer_certificate()
-        algo, _ = cert.get_signature_algorithm().lower().split(b"with")
+        algo, part, _ = cert.get_signature_algorithm().lower().partition(
+            b"with")
+        if not part:
+            raise NotImplementedError
         if algo in (b"sha1", b"md5"):
             algo = b"sha256"
         return parse_openssl_digest(cert.digest(algo.decode("us-ascii")))
