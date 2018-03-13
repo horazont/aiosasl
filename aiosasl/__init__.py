@@ -90,6 +90,16 @@ Base class
 
 .. autoclass:: SASLMechanism
 
+A note for implementers
+-----------------------
+
+The :class:`SASLStateMachine` unwraps `("success", payload)` messages
+passed in from a :class:`SASLInterface` to the equivalent sequence
+`("challenge", payload)` (requiring the empty string as response) and
+`("success", None)`. The two forms are equivalent as per the SASL
+specification and this unwrapping allows uniform treatment of both
+forms by the :class:`SASLMechanism` implementations.
+
 SASL state machine
 ==================
 
