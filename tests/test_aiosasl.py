@@ -217,6 +217,23 @@ class TestSASLStateMachine(unittest.TestCase):
         self.intf.abort.assert_called_with()
         self.assertEqual(self.sm._state, "failure")
 
+    def test_success_simulated_challenge(self):
+        self.sm._state = "challenge"
+        self.intf.respond.return_value = ("success", b"payload")
+        state, payload = run_coroutine(self.sm.response(b"foobar"))
+        self.assertEqual(self.sm._state, "success-simulated-challenge")
+        self.assertEqual(state, "challenge")
+        self.assertEqual(payload, b"payload")
+        state, payload = run_coroutine(self.sm.response(b""))
+        self.assertEqual(state, "success")
+        self.assertEqual(payload, None)
+
+    def test_success_simulated_challenge_protocol_violation(self):
+        self.sm._state = "success-simulated-challenge"
+        with self.assertRaises(aiosasl.SASLFailure):
+            run_coroutine(self.sm.response(b"not-empty"))
+        self.assertEqual(self.sm._state, "failure")
+
     def tearDown(self):
         del self.sm
         del self.intf
@@ -707,8 +724,8 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                 ("response",
                  self.client_final_message_without_proof +
                      b",p="+base64.b64encode(self.client_proof),
-                 "challenge",
-                 b"foo")
+                 "success",
+                 None),
             ]))
 
         with self.assertRaisesRegexp(aiosasl.SASLFailure,
@@ -937,7 +954,8 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.client_final_message_without_proof +
                      b",p="+base64.b64encode(self.client_proof),
                  "challenge",
-                 b"foo")
+                 b"foo"),
+                ("response", b"", "success", b"bar")
             ]))
 
         with self.assertRaisesRegexp(aiosasl.SASLFailure,
@@ -951,7 +969,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
             )
 
         self.assertEqual(
-            "malformed-request",
+            None,
             ctx.exception.opaque_error
         )
 

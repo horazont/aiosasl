@@ -377,6 +377,22 @@ class SASLStateMachine:
         Return the next state of the state machine as tuple (see
         :class:`SASLStateMachine` for details).
         """
+        if self._state == "success-simulated-challenge":
+            if payload != b"":
+                # XXX: either our mechanism is buggy or the server
+                # sent "success" before all challenge-response
+                # messages defined by the mechanism were sent
+                self._state = "failure"
+                raise SASLFailure(
+                    None,
+                    "protocol violation: mechanism did not"
+                    " respond with an empty response to a"
+                    " challenge with final data – this suggests"
+                    " a protocol-violating early success from the server."
+                )
+            self._state = "success"
+            return "success", None
+
         if self._state != "challenge":
             raise RuntimeError(
                 "no challenge has been made or negotiation failed")
@@ -386,6 +402,13 @@ class SASLStateMachine:
         except SASLFailure:
             self._state = "failure"
             raise
+
+        # unfold the ("success", payload) to a sequence of
+        # ("challenge", payload), ("success", None) for the SASLMethod
+        # to allow uniform treatment of both cases
+        if next_state == "success" and payload is not None:
+            self._state = "success-simulated-challenge"
+            return "challenge", payload
 
         self._state = next_state
         return next_state, payload
@@ -398,6 +421,8 @@ class SASLStateMachine:
         """
         if self._state == "initial":
             raise RuntimeError("SASL authentication hasn't started yet")
+
+        # XXX: what do we do here during "success-simulated-challenge"?
 
         try:
             return (yield from self.interface.abort())
@@ -654,10 +679,18 @@ class SCRAMBase:
         except SASLFailure as err:
             raise err.promote_to_authentication_failure() from None
 
-        if state != "success":
+        # this is the pseudo-challenge for the server signature
+        # we have to reply with the empty string!
+        if state != "challenge":
             raise SASLFailure(
                 "malformed-request",
                 text="SCRAM protocol violation")
+
+        state, dummy_payload = yield from sm.response(b"")
+        if state != "success" or dummy_payload is not None:
+            raise SASLFailure(
+                None,
+                "SASL protocol violation")
 
         server_signature = hmac.new(
             hmac.new(
