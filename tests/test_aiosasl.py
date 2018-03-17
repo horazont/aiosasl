@@ -109,6 +109,53 @@ class SASLInterfaceMock(aiosasl.SASLInterface):
             "Not all actions performed")
 
 
+class TestSASLState(unittest.TestCase):
+
+    def test_from_reply(self):
+        self.assertEqual(
+            aiosasl.SASLState.from_reply("success"),
+            aiosasl.SASLState.SUCCESS
+        )
+
+        self.assertEqual(
+            aiosasl.SASLState.from_reply("failure"),
+            aiosasl.SASLState.FAILURE
+        )
+
+        self.assertEqual(
+            aiosasl.SASLState.from_reply("challenge"),
+            aiosasl.SASLState.CHALLENGE
+        )
+
+        self.assertEqual(
+            aiosasl.SASLState.from_reply(aiosasl.SASLState.SUCCESS),
+            aiosasl.SASLState.SUCCESS
+        )
+
+        self.assertEqual(
+            aiosasl.SASLState.from_reply(aiosasl.SASLState.FAILURE),
+            aiosasl.SASLState.FAILURE
+        )
+
+        self.assertEqual(
+            aiosasl.SASLState.from_reply(aiosasl.SASLState.CHALLENGE),
+            aiosasl.SASLState.CHALLENGE
+        )
+
+        with self.assertRaises(RuntimeError):
+            aiosasl.SASLState.from_reply("initial"),
+
+        with self.assertRaises(RuntimeError):
+            aiosasl.SASLState.from_reply("success-simulate-initial"),
+
+        with self.assertRaises(RuntimeError):
+            aiosasl.SASLState.from_reply(aiosasl.SASLState.INITIAL),
+
+        with self.assertRaises(RuntimeError):
+            aiosasl.SASLState.from_reply(
+                aiosasl.SASLState.SUCCESS_SIMULATE_CHALLENGE),
+
+
 class TestSASLStateMachine(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
@@ -118,7 +165,7 @@ class TestSASLStateMachine(unittest.TestCase):
         self.intf.abort = CoroutineMock()
         self.sm = aiosasl.SASLStateMachine(self.intf)
 
-        self.intf.initiate.return_value = ("success", None)
+        self.intf.initiate.return_value = (aiosasl.SASLState.SUCCESS, None)
 
     def test_initiate_calls_to_interface(self):
         result = run_coroutine(
@@ -160,8 +207,8 @@ class TestSASLStateMachine(unittest.TestCase):
             run_coroutine(self.sm.response(b"bar"))
 
     def test_response_calls_to_interface(self):
-        self.sm._state = "challenge"
-        self.intf.respond.return_value = ("success", None)
+        self.sm._state = aiosasl.SASLState.CHALLENGE
+        self.intf.respond.return_value = (aiosasl.SASLState.SUCCESS, None)
 
         result = run_coroutine(
             self.sm.response(b"bar")
@@ -176,7 +223,7 @@ class TestSASLStateMachine(unittest.TestCase):
 
     def test_response_failure(self):
         opaque_error = object()
-        self.sm._state = "challenge"
+        self.sm._state = aiosasl.SASLState.CHALLENGE
         self.intf.respond.side_effect = aiosasl.SASLFailure(
             opaque_error
         )
@@ -186,7 +233,7 @@ class TestSASLStateMachine(unittest.TestCase):
                 self.sm.response(b"bar")
             )
 
-        self.assertEqual(self.sm._state, "failure")
+        self.assertEqual(self.sm._state, aiosasl.SASLState.FAILURE)
 
     def test_reject_abort_without_initiate(self):
         with self.assertRaises(RuntimeError):
@@ -202,11 +249,11 @@ class TestSASLStateMachine(unittest.TestCase):
         )
 
         self.intf.abort.assert_called_with()
-        self.assertEqual(self.sm._state, "failure")
+        self.assertEqual(self.sm._state, aiosasl.SASLState.FAILURE)
 
     def test_abort_set_to_failure_and_re_raise_exceptions(self):
         exc = Exception()
-        self.sm._state = "challenge"
+        self.sm._state = aiosasl.SASLState.CHALLENGE
         self.intf.abort.side_effect = exc
 
         with self.assertRaises(Exception) as ctx:
@@ -215,24 +262,25 @@ class TestSASLStateMachine(unittest.TestCase):
         self.assertIs(ctx.exception, exc)
 
         self.intf.abort.assert_called_with()
-        self.assertEqual(self.sm._state, "failure")
+        self.assertEqual(self.sm._state, aiosasl.SASLState.FAILURE)
 
     def test_success_simulated_challenge(self):
-        self.sm._state = "challenge"
+        self.sm._state = aiosasl.SASLState.CHALLENGE
         self.intf.respond.return_value = ("success", b"payload")
         state, payload = run_coroutine(self.sm.response(b"foobar"))
-        self.assertEqual(self.sm._state, "success-simulated-challenge")
-        self.assertEqual(state, "challenge")
+        self.assertEqual(self.sm._state,
+                         aiosasl.SASLState.SUCCESS_SIMULATE_CHALLENGE)
+        self.assertEqual(state, aiosasl.SASLState.CHALLENGE)
         self.assertEqual(payload, b"payload")
         state, payload = run_coroutine(self.sm.response(b""))
-        self.assertEqual(state, "success")
+        self.assertEqual(state, aiosasl.SASLState.SUCCESS)
         self.assertEqual(payload, None)
 
     def test_success_simulated_challenge_protocol_violation(self):
-        self.sm._state = "success-simulated-challenge"
+        self.sm._state = aiosasl.SASLState.SUCCESS_SIMULATE_CHALLENGE
         with self.assertRaises(aiosasl.SASLFailure):
             run_coroutine(self.sm.response(b"not-empty"))
-        self.assertEqual(self.sm._state, "failure")
+        self.assertEqual(self.sm._state, aiosasl.SASLState.FAILURE)
 
     def tearDown(self):
         del self.sm
