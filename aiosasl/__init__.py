@@ -74,6 +74,8 @@ To implement SASL on an existing protocol, you need to subclass
 
 .. autoclass:: SASLInterface
 
+.. autoclass:: SASLState
+
 SASL mechansims
 ===============
 
@@ -93,10 +95,10 @@ Base class
 A note for implementers
 -----------------------
 
-The :class:`SASLStateMachine` unwraps `("success", payload)` messages
+The :class:`SASLStateMachine` unwraps `(SASLState.SUCCESS, payload)` messages
 passed in from a :class:`SASLInterface` to the equivalent sequence
-`("challenge", payload)` (requiring the empty string as response) and
-`("success", None)`. The two forms are equivalent as per the SASL
+`(SASLState.CHALLENGE, payload)` (requiring the empty string as response) and
+`(SASLState.SUCCESS, None)`. The two forms are equivalent as per the SASL
 specification and this unwrapping allows uniform treatment of both
 forms by the :class:`SASLMechanism` implementations.
 
@@ -120,12 +122,12 @@ Version information
 .. autodata:: __version__
 
 .. autodata:: version_info
-
 """
 
 import abc
 import asyncio
 import base64
+import enum
 import functools
 import hashlib
 import hmac
@@ -266,6 +268,77 @@ class AuthenticationFailure(SASLError):
         super().__init__(opaque_error, "authentication failed", text=text)
 
 
+class SASLState(enum.Enum):
+    """
+    The states of the SASL state machine.
+
+    .. attribute:: CHALLENGE
+
+       the server sent a SASL challenge
+
+    .. attribute:: SUCCESS
+
+       the authentication was successful
+
+    .. attribute:: FAILURE
+
+       the authentication failed
+
+    Internal states used by the state machine:
+
+    .. attribute:: INITIAL
+
+       the state of the state machine before the
+       authentication is started
+
+    .. attribute:: SUCCESS_SIMULATE_CHALLENGE
+
+       used to unwrap success replies that carry final data
+
+    These internal states *must not* be returned by the
+    :class:`SASLInterface` methods as first component of the result
+    tuple.
+
+    The following method is used to process replies returned
+    by the :class:`SASLInterface` methods:
+
+    .. method:: from_reply
+    """
+
+    INITIAL = "initial"
+    CHALLENGE = "challenge"
+    SUCCESS = "success"
+    FAILURE = "failure"
+    SUCCESS_SIMULATE_CHALLENGE = "success-simulate-challenge"
+
+    @classmethod
+    def from_reply(cls, state):
+        """
+        Comptaibility layer for old :class:`SASLInterface`
+        implementations.
+
+        Accepts the follwing set of :class:`SASLState` or strings and
+        maps the strings to :class:`SASLState` elements as follows:
+
+          ``"challenge"``
+            :member:`SASLState.CHALLENGE`
+
+           ``"failue"``
+             :member:`SASLState.FAILURE`
+
+           ``"success"``
+             :member:`SASLState.SUCCESS`
+        """
+        if state in (SASLState.FAILURE, SASLState.SUCCESS,
+                     SASLState.CHALLENGE):
+            return state
+
+        if state in ("failure", "success", "challenge"):
+            return SASLState(state)
+        else:
+            raise RuntimeError("invalid SASL state", state)
+
+
 class SASLInterface(metaclass=abc.ABCMeta):
     """
     This class serves as an abstract base class for interfaces for use with
@@ -279,23 +352,31 @@ class SASLInterface(metaclass=abc.ABCMeta):
 
     The return values of the methods below are tuples of the following form:
 
-    * ``("success", payload)`` -- After successful authentication, success is
-      returned. Depending on the mechanism, a payload (as :class:`bytes`
-      object) may be attached to the result, otherwise, ``payload`` is
-      :data:`None`.
+    * ``(SASLState.SUCCESS, payload)`` -- After successful
+      authentication, success is returned. Depending on the mechanism,
+      a payload (as :class:`bytes` object) may be attached to the
+      result, otherwise, ``payload`` is :data:`None`.
 
-    * ``("challenge", payload)`` -- A challenge was sent by the server in reply
-      to the previous command.
+    * ``(SASLState.CHALLENGE, payload)`` -- A challenge was sent by
+      the server in reply to the previous command.
 
-    * ``("failure", None)`` -- This is only ever returned by :meth:`abort`. All
-      other methods **must** raise errors as :class:`SASLFailure`.
+    * ``(SASLState.FAILURE, None)`` -- This is only ever returned by
+      :meth:`abort`. All other methods **must** raise errors as
+      :class:`SASLFailure`.
+
+    .. versionchanged:: 0.4
+
+       The first element of the returned tuples are now elements of
+       :class:`SASLState`. For compatibility with previous versions of
+       ``aiosasl`` the first elements of the string may be one of the
+       strings ``"success"``, ``"failure"`` or "``challenge``". For
+       more information see :meth:`SASLState.from_reply`.
 
     .. automethod:: initiate
 
     .. automethod:: respond
 
     .. automethod:: abort
-
     """
 
     @abc.abstractmethod
@@ -327,7 +408,7 @@ class SASLInterface(metaclass=abc.ABCMeta):
     def abort(self):
         """
         Abort the authentication. The result is either the failure tuple
-        (``("failure", None)``) or a :class:`SASLFailure` exception if
+        (``(SASLState.FAILURE, None)``) or a :class:`SASLFailure` exception if
         the response from the peer did not indicate abortion (e.g. another
         error was returned by the peer or the peer indicated success).
         """
@@ -349,7 +430,7 @@ class SASLStateMachine:
     def __init__(self, interface):
         super().__init__()
         self.interface = interface
-        self._state = "initial"
+        self._state = SASLState.INITIAL
 
     @asyncio.coroutine
     def initiate(self, mechanism, payload=None):
@@ -363,7 +444,7 @@ class SASLStateMachine:
         :class:`SASLStateMachine` for details).
         """
 
-        if self._state != "initial":
+        if self._state != SASLState.INITIAL:
             raise RuntimeError("initiate has already been called")
 
         try:
@@ -371,9 +452,10 @@ class SASLStateMachine:
                 mechanism,
                 payload=payload)
         except SASLFailure:
-            self._state = "failure"
+            self._state = SASLState.FAILURE
             raise
 
+        next_state = SASLState.from_reply(next_state)
         self._state = next_state
         return next_state, payload
 
@@ -387,12 +469,12 @@ class SASLStateMachine:
         Return the next state of the state machine as tuple (see
         :class:`SASLStateMachine` for details).
         """
-        if self._state == "success-simulated-challenge":
+        if self._state == SASLState.SUCCESS_SIMULATE_CHALLENGE:
             if payload != b"":
                 # XXX: either our mechanism is buggy or the server
-                # sent "success" before all challenge-response
+                # sent SASLState.SUCCESS before all challenge-response
                 # messages defined by the mechanism were sent
-                self._state = "failure"
+                self._state = SASLState.FAILURE
                 raise SASLFailure(
                     None,
                     "protocol violation: mechanism did not"
@@ -400,25 +482,27 @@ class SASLStateMachine:
                     " challenge with final data – this suggests"
                     " a protocol-violating early success from the server."
                 )
-            self._state = "success"
-            return "success", None
+            self._state = SASLState.SUCCESS
+            return SASLState.SUCCESS, None
 
-        if self._state != "challenge":
+        if self._state != SASLState.CHALLENGE:
             raise RuntimeError(
                 "no challenge has been made or negotiation failed")
 
         try:
             next_state, payload = yield from self.interface.respond(payload)
         except SASLFailure:
-            self._state = "failure"
+            self._state = SASLState.FAILURE
             raise
 
-        # unfold the ("success", payload) to a sequence of
-        # ("challenge", payload), ("success", None) for the SASLMethod
+        next_state = SASLState.from_reply(next_state)
+
+        # unfold the (SASLState.SUCCESS, payload) to a sequence of
+        # (SASLState.CHALLENGE, payload), (SASLState.SUCCESS, None) for the SASLMethod
         # to allow uniform treatment of both cases
-        if next_state == "success" and payload is not None:
-            self._state = "success-simulated-challenge"
-            return "challenge", payload
+        if next_state == SASLState.SUCCESS and payload is not None:
+            self._state = SASLState.SUCCESS_SIMULATE_CHALLENGE
+            return SASLState.CHALLENGE, payload
 
         self._state = next_state
         return next_state, payload
@@ -429,15 +513,16 @@ class SASLStateMachine:
         Abort an initiated SASL authentication process. The expected result
         state is ``failure``.
         """
-        if self._state == "initial":
+        if self._state == SASLState.INITIAL:
             raise RuntimeError("SASL authentication hasn't started yet")
 
-        # XXX: what do we do here during "success-simulated-challenge"?
+        if self._state == SASLState.SUCCESS_SIMULATE_CHALLENGE:
+            raise RuntimeError("SASL message exchange already over")
 
         try:
             return (yield from self.interface.abort())
         finally:
-            self._state = "failure"
+            self._state = SASLState.FAILURE
 
 
 class SASLMechanism(metaclass=abc.ABCMeta):
@@ -524,7 +609,7 @@ class PLAIN(SASLMechanism):
             mechanism="PLAIN",
             payload=b"\0" + username + b"\0" + password)
 
-        if state != "success":
+        if state != SASLState.SUCCESS:
             raise SASLFailure(
                 None,
                 text="SASL protocol violation")
@@ -627,7 +712,7 @@ class SCRAMBase:
             mechanism,
             gs2_header + auth_message)
 
-        if state != "challenge" or payload is None:
+        if state != SASLState.CHALLENGE or payload is None:
             yield from sm.abort()
             raise SASLFailure(
                 None,
@@ -691,13 +776,13 @@ class SCRAMBase:
 
         # this is the pseudo-challenge for the server signature
         # we have to reply with the empty string!
-        if state != "challenge":
+        if state != SASLState.CHALLENGE:
             raise SASLFailure(
                 "malformed-request",
                 text="SCRAM protocol violation")
 
         state, dummy_payload = yield from sm.response(b"")
-        if state != "success" or dummy_payload is not None:
+        if state != SASLState.SUCCESS or dummy_payload is not None:
             raise SASLFailure(
                 None,
                 "SASL protocol violation")
@@ -834,7 +919,7 @@ class ANONYMOUS(SASLMechanism):
             payload=self._token
         )
 
-        if state != "success":
+        if state != SASLState.SUCCESS:
             raise SASLFailure(
                 None,
                 text="SASL protocol violation")
