@@ -32,7 +32,8 @@ This module implements the SASLprep (`RFC 4013`_) stringprep profile.
 """
 
 import stringprep
-import unicodedata
+
+from unicodedata import ucd_3_2_0 as unicodedata
 
 _nodeprep_prohibited = frozenset("\"&'/:<>@")
 
