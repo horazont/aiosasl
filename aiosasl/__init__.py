@@ -633,9 +633,6 @@ class SCRAMBase:
         # a value of 1 is added if the -PLUS variant is used
         # -- JWI
         "SHA-1": ("sha1", 1),
-        "SHA-224": ("sha224", 224),
-        "SHA-512": ("sha512", 512),
-        "SHA-384": ("sha384", 384),
         "SHA-256": ("sha256", 256),
     }
 

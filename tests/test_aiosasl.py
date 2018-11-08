@@ -397,8 +397,7 @@ class TestPLAIN(unittest.TestCase):
 
 class TestSCRAMNegotiation(unittest.TestCase):
     def test_supports_SCRAM_famliy(self):
-        hashes = ["SHA-1", "SHA-224", "SHA-256",
-                  "SHA-512", "SHA-384", "SHA-256"]
+        hashes = ["SHA-1", "SHA-256"]
 
         for hashname in hashes:
             mechanism = "SCRAM-{}".format(hashname)
@@ -408,8 +407,7 @@ class TestSCRAMNegotiation(unittest.TestCase):
             )
 
     def test_supports_SCRAMPLUS_famliy(self):
-        hashes = ["SHA-1", "SHA-224", "SHA-256",
-                  "SHA-512", "SHA-384", "SHA-256"]
+        hashes = ["SHA-1", "SHA-256"]
 
         for hashname in hashes:
             mechanism = "SCRAM-{}-PLUS".format(hashname)
@@ -420,36 +418,26 @@ class TestSCRAMNegotiation(unittest.TestCase):
 
     def test_pick_longest_hash_SCRAM(self):
         self.assertEqual(
-            ("SCRAM-SHA-512", "sha512"),
+            ("SCRAM-SHA-256", "sha256"),
             aiosasl.SCRAM.any_supported([
                 "SCRAM-SHA-1",
-                "SCRAM-SHA-512",
-                "SCRAM-SHA-224",
+                "SCRAM-SHA-256",
                 "PLAIN",
             ])
         )
 
+    def test_no_support_for_unregistered_functions(self):
         self.assertEqual(
             ("SCRAM-SHA-256", "sha256"),
             aiosasl.SCRAM.any_supported([
                 "SCRAM-SHA-1",
                 "SCRAM-SHA-256",
-                "SCRAM-SHA-224",
+                "SCRAM-SHA-512",
                 "PLAIN",
             ])
         )
 
     def test_pick_longest_hash_SCRAMPLUS(self):
-        self.assertEqual(
-            ("SCRAM-SHA-512-PLUS", "sha512"),
-            aiosasl.SCRAMPLUS.any_supported([
-                "SCRAM-SHA-1-PLUS",
-                "SCRAM-SHA-512-PLUS",
-                "SCRAM-SHA-224-PLUS",
-                "PLAIN",
-            ])
-        )
-
         self.assertEqual(
             ("SCRAM-SHA-256-PLUS", "sha256"),
             aiosasl.SCRAMPLUS.any_supported([
@@ -471,8 +459,7 @@ class TestSCRAMNegotiation(unittest.TestCase):
             )
 
     def test_reject_scram_SCRAMPLUS(self):
-        hashes = ["SHA-1", "SHA-224", "SHA-256",
-                  "SHA-512", "SHA-384", "SHA-256"]
+        hashes = ["SHA-1", "SHA-256"]
 
         for hashname in hashes:
             mechanism = "SCRAM-{}".format(hashname)
