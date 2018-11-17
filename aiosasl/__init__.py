@@ -81,9 +81,9 @@ SASL mechansims
 
 .. autoclass:: PLAIN
 
-.. autoclass:: SCRAM
+.. autoclass:: SCRAM(credential_provider, *[, after_scram_plus=False][, enforce_minimum_iteration_count=True])
 
-.. autoclass:: SCRAMPLUS
+.. autoclass:: SCRAMPLUS(credential_provider, cb_provider, *[, enforce_minimum_iteration_count=True])
 
 .. autoclass:: ANONYMOUS
 
@@ -831,19 +831,36 @@ class SCRAM(SCRAMBase, SASLMechanism):
     """
     The password-based SCRAM (non-PLUS) SASL mechanism (see :rfc:`5802`).
 
+    :param credential_provider: A coroutine function which returns credentials.
+    :param after_scram_plus: Flag to indicate that SCRAM-PLUS *is* supported by
+        your implementation.
+    :type after_scram_plus: :class:`bool`
+    :param enforce_minimum_iteration_count: Enforce the minimum iteration
+        count specified by the SCRAM specifications.
+    :type enforce_minimum_iteration_count: :class:`bool`
+
     .. note::
 
        As "non-PLUS" suggests, this does not support channel binding.
        Use :class:`SCRAMPLUS` if you want channel binding.
 
 
-    `credential_provider` must be coroutine which returns a ``(user,
+    `credential_provider` must be coroutine function which returns a ``(user,
     password)`` tuple.
 
     If this is used after :class:`SCRAMPLUS` in a method list, the
     keyword argument `after_scram_plus` should be set to
     :data:`True`. Then we will use the gs2 header ``y,,`` to prevent
     down-grade attacks by a man-in-the-middle attacker.
+
+    `enforce_minimum_iteration_count` controls the enforcement of the specified
+    minimum iteration count for the key derivation function used in SCRAM. By
+    default, this enforcement is enabled, and you are strongly advised to not
+    disable it: it can be used to make the exchange weaker.
+
+    Disabling `enforce_minimum_iteration_count` only makes sense if the
+    authentication exchange would otherwise fall back to using :class:`PLAIN`
+    or a similarly weak authentication mechanism.
     """
     _channel_binding = False
 
@@ -892,12 +909,34 @@ class SCRAMPLUS(SCRAMBase, SASLMechanism):
     """
     The password-based SCRAM-PLUS SASL mechanism (see :rfc:`5802`).
 
+    :param credential_provider: A coroutine function which returns credentials.
+    :param cb_provider: Object which provides channel binding data and
+        information.
+    :type cb_provider: :class:`ChannelBindingProvider`
+    :param after_scram_plus: Flag to indicate that SCRAM-PLUS *is* supported by
+        your implementation.
+    :type after_scram_plus: :class:`bool`
+    :param enforce_minimum_iteration_count: Enforce the minimum iteration
+        count specified by the SCRAM specifications.
+    :type enforce_minimum_iteration_count: :class:`bool`
+
     `credential_provider` must be coroutine which returns a ``(user,
     password)`` tuple.
 
     `cb_provider` must be an instance of
     :class:`ChannelBindingProvider`, which specifies and implements
     the channel binding type to use.
+
+    `enforce_minimum_iteration_count` controls the enforcement of the specified
+    minimum iteration count for the key derivation function used in SCRAM. By
+    default, this enforcement is enabled, and you are strongly advised to not
+    disable it: it can be used to make the exchange weaker.
+
+    .. seealso::
+
+        :class:`SCRAM` for more information on
+        `enforce_minimum_iteration_count`.
+
     """
     _channel_binding = True
 
