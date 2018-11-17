@@ -402,7 +402,7 @@ class TestSCRAMNegotiation(unittest.TestCase):
         for hashname in hashes:
             mechanism = "SCRAM-{}".format(hashname)
             self.assertEqual(
-                (mechanism, hashname.replace("-", "").lower()),
+                (mechanism, unittest.mock.ANY),
                 aiosasl.SCRAM.any_supported([mechanism])
             )
 
@@ -412,13 +412,13 @@ class TestSCRAMNegotiation(unittest.TestCase):
         for hashname in hashes:
             mechanism = "SCRAM-{}-PLUS".format(hashname)
             self.assertEqual(
-                (mechanism, hashname.replace("-", "").lower()),
+                (mechanism, unittest.mock.ANY),
                 aiosasl.SCRAMPLUS.any_supported([mechanism])
             )
 
     def test_pick_longest_hash_SCRAM(self):
         self.assertEqual(
-            ("SCRAM-SHA-256", "sha256"),
+            ("SCRAM-SHA-256", unittest.mock.ANY),
             aiosasl.SCRAM.any_supported([
                 "SCRAM-SHA-1",
                 "SCRAM-SHA-256",
@@ -428,7 +428,7 @@ class TestSCRAMNegotiation(unittest.TestCase):
 
     def test_no_support_for_unregistered_functions(self):
         self.assertEqual(
-            ("SCRAM-SHA-256", "sha256"),
+            ("SCRAM-SHA-256", unittest.mock.ANY),
             aiosasl.SCRAM.any_supported([
                 "SCRAM-SHA-1",
                 "SCRAM-SHA-256",
@@ -439,7 +439,7 @@ class TestSCRAMNegotiation(unittest.TestCase):
 
     def test_pick_longest_hash_SCRAMPLUS(self):
         self.assertEqual(
-            ("SCRAM-SHA-256-PLUS", "sha256"),
+            ("SCRAM-SHA-256-PLUS", unittest.mock.ANY),
             aiosasl.SCRAMPLUS.any_supported([
                 "SCRAM-SHA-1-PLUS",
                 "SCRAM-SHA-256-PLUS",
@@ -605,10 +605,11 @@ class TestSCRAMImpl:
         return ("user", "pencil")
 
     def _run(self, smmock, scram):
+        info = aiosasl.SCRAMBase._supported_hashalgos["SHA-1"]
         if self._scram_plus in ('no', 'supported'):
-            token = ("SCRAM-SHA-1", "sha1")
+            token = ("SCRAM-SHA-1", info)
         else:
-            token = ("SCRAM-SHA-1-PLUS", "sha1")
+            token = ("SCRAM-SHA-1-PLUS", info)
 
         result = asyncio.get_event_loop().run_until_complete(
             scram.authenticate(smmock, token)

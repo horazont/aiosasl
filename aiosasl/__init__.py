@@ -127,6 +127,7 @@ Version information
 import abc
 import asyncio
 import base64
+import collections
 import enum
 import functools
 import hashlib
@@ -617,6 +618,16 @@ class PLAIN(SASLMechanism):
         return True
 
 
+SCRAMHashInfo = collections.namedtuple(
+    "SCRAMHashInfo",
+    [
+        "hashfun_name",
+        "quality",
+        "minimum_iteration_count",
+    ]
+)
+
+
 class SCRAMBase:
     """
     Shared implementation of SCRAM and SCRAMPLUS.
@@ -632,8 +643,8 @@ class SCRAMBase:
         # if anyone has a better hash ordering suggestion, I’m open for it
         # a value of 1 is added if the -PLUS variant is used
         # -- JWI
-        "SHA-1": ("sha1", 1),
-        "SHA-256": ("sha256", 256),
+        "SHA-1": SCRAMHashInfo("sha1", 1, 4096),
+        "SHA-256": SCRAMHashInfo("sha256", 256, 4096),
     }
 
     @classmethod
@@ -654,11 +665,11 @@ class SCRAMBase:
                     continue
 
             try:
-                hashfun_name, quality = cls._supported_hashalgos[hashfun_key]
+                info = cls._supported_hashalgos[hashfun_key]
             except KeyError:
                 continue
 
-            supported.append(((1, quality), (mechanism, hashfun_name,)))
+            supported.append(((1, info.quality), (mechanism, info,)))
 
         if not supported:
             return None
@@ -685,13 +696,13 @@ class SCRAMBase:
 
     @asyncio.coroutine
     def authenticate(self, sm, token):
-        mechanism, hashfun_name, = token
+        mechanism, info, = token
         logger.info("attempting %s mechanism (using %s hashfun)",
                     mechanism,
-                    hashfun_name)
+                    info)
         # this is pretty much a verbatim implementation of RFC 5802.
 
-        hashfun_factory = functools.partial(hashlib.new, hashfun_name)
+        hashfun_factory = functools.partial(hashlib.new, info.hashfun_name)
 
         gs2_header = self._get_gs2_header()
         username, password = yield from self._credential_provider()
@@ -738,7 +749,7 @@ class SCRAMBase:
         t0 = time.time()
 
         salted_password = pbkdf2(
-            hashfun_name,
+            info.hashfun_name,
             password,
             salt,
             iteration_count)
