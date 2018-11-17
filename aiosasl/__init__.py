@@ -746,6 +746,17 @@ class SCRAMBase:
                 None,
                 text="server nonce doesn't fit our nonce")
 
+        if iteration_count < info.minimum_iteration_count:
+            raise SASLFailure(
+                None,
+                text="minimum iteration count for {} violated "
+                "({} is less than {})".format(
+                    mechanism,
+                    iteration_count,
+                    info.minimum_iteration_count,
+                )
+            )
+
         t0 = time.time()
 
         salted_password = pbkdf2(
