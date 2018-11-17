@@ -546,6 +546,13 @@ class TestSCRAMImpl:
             4096,
             self.digest_size)
 
+        self.salted_password_4000 = aiosasl.pbkdf2(
+            "sha1",
+            self.password,
+            self.salt,
+            4000,
+            self.digest_size)
+
         self.salted_password_5000 = aiosasl.pbkdf2(
             "sha1",
             self.password,
@@ -558,6 +565,11 @@ class TestSCRAMImpl:
             b"Client Key",
             self.hashfun_factory).digest()
 
+        self.client_key_4000 = hmac.new(
+            self.salted_password_4000,
+            b"Client Key",
+            self.hashfun_factory).digest()
+
         self.client_key_5000 = hmac.new(
             self.salted_password_5000,
             b"Client Key",
@@ -565,6 +577,9 @@ class TestSCRAMImpl:
 
         self.stored_key = self.hashfun_factory(
             self.client_key).digest()
+
+        self.stored_key_4000 = self.hashfun_factory(
+            self.client_key_4000).digest()
 
         self.stored_key_5000 = self.hashfun_factory(
             self.client_key_5000).digest()
@@ -574,6 +589,11 @@ class TestSCRAMImpl:
             b"r=Zm9vAAAAAAAAAAAAAAAA3rfcNHYJY1ZVvWVs7j,s=",
             base64.b64encode(self.salt),
             b",i=4096"
+        ])
+        self.server_first_message_4000 = b"".join([
+            b"r=Zm9vAAAAAAAAAAAAAAAA3rfcNHYJY1ZVvWVs7j,s=",
+            base64.b64encode(self.salt),
+            b",i=4000"
         ])
         self.server_first_message_5000 = b"".join([
             b"r=Zm9vAAAAAAAAAAAAAAAA3rfcNHYJY1ZVvWVs7j,s=",
@@ -600,6 +620,12 @@ class TestSCRAMImpl:
             self.client_final_message_without_proof
         ])
 
+        self.auth_message_4000 = b",".join([
+            self.client_first_message_bare,
+            self.server_first_message_4000,
+            self.client_final_message_without_proof
+        ])
+
         self.auth_message_5000 = b",".join([
             self.client_first_message_bare,
             self.server_first_message_5000,
@@ -611,17 +637,28 @@ class TestSCRAMImpl:
             self.auth_message,
             self.hashfun_factory).digest()
 
+        self.client_signature_4000 = hmac.new(
+            self.stored_key_4000,
+            self.auth_message_4000,
+            self.hashfun_factory).digest()
+
         self.client_signature_5000 = hmac.new(
             self.stored_key_5000,
             self.auth_message_5000,
             self.hashfun_factory).digest()
 
         self.client_proof = xor_bytes(self.client_signature, self.client_key)
+        self.client_proof_4000 = xor_bytes(self.client_signature_4000,
+                                           self.client_key_4000)
         self.client_proof_5000 = xor_bytes(self.client_signature_5000,
                                            self.client_key_5000)
 
         self.server_key = hmac.new(
             self.salted_password,
+            b"Server Key",
+            self.hashfun_factory).digest()
+        self.server_key_4000 = hmac.new(
+            self.salted_password_4000,
             b"Server Key",
             self.hashfun_factory).digest()
         self.server_key_5000 = hmac.new(
@@ -631,6 +668,10 @@ class TestSCRAMImpl:
         self.server_signature = hmac.new(
             self.server_key,
             self.auth_message,
+            self.hashfun_factory).digest()
+        self.server_signature_4000 = hmac.new(
+            self.server_key_4000,
+            self.auth_message_4000,
             self.hashfun_factory).digest()
         self.server_signature_5000 = hmac.new(
             self.server_key_5000,
@@ -857,6 +898,29 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
             None,
             ctx.exception.opaque_error
         )
+
+    def test_too_low_iteration_count_without_enforcement(self):
+        smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
+            self,
+            [
+                ("auth;SCRAM-SHA-1",
+                 b"n,,"+self.client_first_message_bare,
+                 "challenge",
+                 self.server_first_message_4000),
+                ("response",
+                 self.client_final_message_without_proof +
+                     b",p="+base64.b64encode(self.client_proof_4000),
+                 "success",
+                 b"v="+base64.b64encode(self.server_signature_4000))
+            ]))
+
+        self.assertTrue(self._run(
+            smmock,
+            aiosasl.SCRAM(
+                self._provide_credentials,
+                enforce_minimum_iteration_count=False,
+            )
+        ))
 
     def test_high_iteration_count(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(

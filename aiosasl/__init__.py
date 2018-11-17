@@ -633,10 +633,12 @@ class SCRAMBase:
     Shared implementation of SCRAM and SCRAMPLUS.
     """
 
-    def __init__(self, credential_provider, *, nonce_length=15):
+    def __init__(self, credential_provider, *, nonce_length=15,
+                 enforce_minimum_iteration_count=True):
         super().__init__()
         self._credential_provider = credential_provider
         self.nonce_length = nonce_length
+        self.enforce_minimum_iteration_count = enforce_minimum_iteration_count
 
     _supported_hashalgos = {
         # the second argument is for preference ordering (highest first)
@@ -746,7 +748,8 @@ class SCRAMBase:
                 None,
                 text="server nonce doesn't fit our nonce")
 
-        if iteration_count < info.minimum_iteration_count:
+        if (self.enforce_minimum_iteration_count and
+                iteration_count < info.minimum_iteration_count):
             raise SASLFailure(
                 None,
                 text="minimum iteration count for {} violated "
