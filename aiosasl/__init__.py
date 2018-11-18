@@ -64,6 +64,7 @@ below:
 
    PLAIN
    SCRAM
+   SCRAMPLUS
 
 Interface for protocols using SASL
 ==================================
@@ -73,12 +74,16 @@ To implement SASL on an existing protocol, you need to subclass
 
 .. autoclass:: SASLInterface
 
+.. autoclass:: SASLState
+
 SASL mechansims
 ===============
 
 .. autoclass:: PLAIN
 
-.. autoclass:: SCRAM
+.. autoclass:: SCRAM(credential_provider, *[, after_scram_plus=False][, enforce_minimum_iteration_count=True])
+
+.. autoclass:: SCRAMPLUS(credential_provider, cb_provider, *[, enforce_minimum_iteration_count=True])
 
 .. autoclass:: ANONYMOUS
 
@@ -86,6 +91,16 @@ Base class
 ----------
 
 .. autoclass:: SASLMechanism
+
+A note for implementers
+-----------------------
+
+The :class:`SASLStateMachine` unwraps `(SASLState.SUCCESS, payload)` messages
+passed in from a :class:`SASLInterface` to the equivalent sequence
+`(SASLState.CHALLENGE, payload)` (requiring the empty string as response) and
+`(SASLState.SUCCESS, None)`. The two forms are equivalent as per the SASL
+specification and this unwrapping allows uniform treatment of both
+forms by the :class:`SASLMechanism` implementations.
 
 SASL state machine
 ==================
@@ -107,22 +122,22 @@ Version information
 .. autodata:: __version__
 
 .. autodata:: version_info
-
 """
 
 import abc
 import asyncio
 import base64
+import collections
+import enum
 import functools
 import hashlib
 import hmac
-import itertools
 import logging
-import operator
 import random
 import time
 
 from aiosasl.stringprep import saslprep, trace
+from aiosasl.utils import xor_bytes
 
 from .version import version, __version__, version_info  # NOQA
 
@@ -142,6 +157,7 @@ __version__ = __version__
 
 
 _system_random = random.SystemRandom()
+
 
 try:
     from hashlib import pbkdf2_hmac as pbkdf2
@@ -182,9 +198,7 @@ except ImportError:
             u_accum = u_prev
             for k in range(1, iterations):
                 u_curr = do_hmac(u_prev)
-                u_accum = bytes(itertools.starmap(
-                    operator.xor,
-                    zip(u_accum, u_curr)))
+                u_accum = xor_bytes(u_accum, u_curr)
                 u_prev = u_curr
 
             return u_accum
@@ -255,6 +269,77 @@ class AuthenticationFailure(SASLError):
         super().__init__(opaque_error, "authentication failed", text=text)
 
 
+class SASLState(enum.Enum):
+    """
+    The states of the SASL state machine.
+
+    .. attribute:: CHALLENGE
+
+       the server sent a SASL challenge
+
+    .. attribute:: SUCCESS
+
+       the authentication was successful
+
+    .. attribute:: FAILURE
+
+       the authentication failed
+
+    Internal states used by the state machine:
+
+    .. attribute:: INITIAL
+
+       the state of the state machine before the
+       authentication is started
+
+    .. attribute:: SUCCESS_SIMULATE_CHALLENGE
+
+       used to unwrap success replies that carry final data
+
+    These internal states *must not* be returned by the
+    :class:`SASLInterface` methods as first component of the result
+    tuple.
+
+    The following method is used to process replies returned
+    by the :class:`SASLInterface` methods:
+
+    .. method:: from_reply
+    """
+
+    INITIAL = "initial"
+    CHALLENGE = "challenge"
+    SUCCESS = "success"
+    FAILURE = "failure"
+    SUCCESS_SIMULATE_CHALLENGE = "success-simulate-challenge"
+
+    @classmethod
+    def from_reply(cls, state):
+        """
+        Comptaibility layer for old :class:`SASLInterface`
+        implementations.
+
+        Accepts the follwing set of :class:`SASLState` or strings and
+        maps the strings to :class:`SASLState` elements as follows:
+
+          ``"challenge"``
+            :member:`SASLState.CHALLENGE`
+
+           ``"failue"``
+             :member:`SASLState.FAILURE`
+
+           ``"success"``
+             :member:`SASLState.SUCCESS`
+        """
+        if state in (SASLState.FAILURE, SASLState.SUCCESS,
+                     SASLState.CHALLENGE):
+            return state
+
+        if state in ("failure", "success", "challenge"):
+            return SASLState(state)
+        else:
+            raise RuntimeError("invalid SASL state", state)
+
+
 class SASLInterface(metaclass=abc.ABCMeta):
     """
     This class serves as an abstract base class for interfaces for use with
@@ -268,23 +353,31 @@ class SASLInterface(metaclass=abc.ABCMeta):
 
     The return values of the methods below are tuples of the following form:
 
-    * ``("success", payload)`` -- After successful authentication, success is
-      returned. Depending on the mechanism, a payload (as :class:`bytes`
-      object) may be attached to the result, otherwise, ``payload`` is
-      :data:`None`.
+    * ``(SASLState.SUCCESS, payload)`` -- After successful
+      authentication, success is returned. Depending on the mechanism,
+      a payload (as :class:`bytes` object) may be attached to the
+      result, otherwise, ``payload`` is :data:`None`.
 
-    * ``("challenge", payload)`` -- A challenge was sent by the server in reply
-      to the previous command.
+    * ``(SASLState.CHALLENGE, payload)`` -- A challenge was sent by
+      the server in reply to the previous command.
 
-    * ``("failure", None)`` -- This is only ever returned by :meth:`abort`. All
-      other methods **must** raise errors as :class:`SASLFailure`.
+    * ``(SASLState.FAILURE, None)`` -- This is only ever returned by
+      :meth:`abort`. All other methods **must** raise errors as
+      :class:`SASLFailure`.
+
+    .. versionchanged:: 0.4
+
+       The first element of the returned tuples are now elements of
+       :class:`SASLState`. For compatibility with previous versions of
+       ``aiosasl`` the first elements of the string may be one of the
+       strings ``"success"``, ``"failure"`` or "``challenge``". For
+       more information see :meth:`SASLState.from_reply`.
 
     .. automethod:: initiate
 
     .. automethod:: respond
 
     .. automethod:: abort
-
     """
 
     @abc.abstractmethod
@@ -316,7 +409,7 @@ class SASLInterface(metaclass=abc.ABCMeta):
     def abort(self):
         """
         Abort the authentication. The result is either the failure tuple
-        (``("failure", None)``) or a :class:`SASLFailure` exception if
+        (``(SASLState.FAILURE, None)``) or a :class:`SASLFailure` exception if
         the response from the peer did not indicate abortion (e.g. another
         error was returned by the peer or the peer indicated success).
         """
@@ -338,7 +431,7 @@ class SASLStateMachine:
     def __init__(self, interface):
         super().__init__()
         self.interface = interface
-        self._state = "initial"
+        self._state = SASLState.INITIAL
 
     @asyncio.coroutine
     def initiate(self, mechanism, payload=None):
@@ -352,7 +445,7 @@ class SASLStateMachine:
         :class:`SASLStateMachine` for details).
         """
 
-        if self._state != "initial":
+        if self._state != SASLState.INITIAL:
             raise RuntimeError("initiate has already been called")
 
         try:
@@ -360,9 +453,10 @@ class SASLStateMachine:
                 mechanism,
                 payload=payload)
         except SASLFailure:
-            self._state = "failure"
+            self._state = SASLState.FAILURE
             raise
 
+        next_state = SASLState.from_reply(next_state)
         self._state = next_state
         return next_state, payload
 
@@ -376,15 +470,40 @@ class SASLStateMachine:
         Return the next state of the state machine as tuple (see
         :class:`SASLStateMachine` for details).
         """
-        if self._state != "challenge":
+        if self._state == SASLState.SUCCESS_SIMULATE_CHALLENGE:
+            if payload != b"":
+                # XXX: either our mechanism is buggy or the server
+                # sent SASLState.SUCCESS before all challenge-response
+                # messages defined by the mechanism were sent
+                self._state = SASLState.FAILURE
+                raise SASLFailure(
+                    None,
+                    "protocol violation: mechanism did not"
+                    " respond with an empty response to a"
+                    " challenge with final data – this suggests"
+                    " a protocol-violating early success from the server."
+                )
+            self._state = SASLState.SUCCESS
+            return SASLState.SUCCESS, None
+
+        if self._state != SASLState.CHALLENGE:
             raise RuntimeError(
                 "no challenge has been made or negotiation failed")
 
         try:
             next_state, payload = yield from self.interface.respond(payload)
         except SASLFailure:
-            self._state = "failure"
+            self._state = SASLState.FAILURE
             raise
+
+        next_state = SASLState.from_reply(next_state)
+
+        # unfold the (SASLState.SUCCESS, payload) to a sequence of
+        # (SASLState.CHALLENGE, payload), (SASLState.SUCCESS, None) for the SASLMethod
+        # to allow uniform treatment of both cases
+        if next_state == SASLState.SUCCESS and payload is not None:
+            self._state = SASLState.SUCCESS_SIMULATE_CHALLENGE
+            return SASLState.CHALLENGE, payload
 
         self._state = next_state
         return next_state, payload
@@ -395,13 +514,16 @@ class SASLStateMachine:
         Abort an initiated SASL authentication process. The expected result
         state is ``failure``.
         """
-        if self._state == "initial":
+        if self._state == SASLState.INITIAL:
             raise RuntimeError("SASL authentication hasn't started yet")
+
+        if self._state == SASLState.SUCCESS_SIMULATE_CHALLENGE:
+            raise RuntimeError("SASL message exchange already over")
 
         try:
             return (yield from self.interface.abort())
         finally:
-            self._state = "failure"
+            self._state = SASLState.FAILURE
 
 
 class SASLMechanism(metaclass=abc.ABCMeta):
@@ -488,7 +610,7 @@ class PLAIN(SASLMechanism):
             mechanism="PLAIN",
             payload=b"\0" + username + b"\0" + password)
 
-        if state != "success":
+        if state != SASLState.SUCCESS:
             raise SASLFailure(
                 None,
                 text="SASL protocol violation")
@@ -496,39 +618,37 @@ class PLAIN(SASLMechanism):
         return True
 
 
-class SCRAM(SASLMechanism):
+SCRAMHashInfo = collections.namedtuple(
+    "SCRAMHashInfo",
+    [
+        "hashfun_name",
+        "quality",
+        "minimum_iteration_count",
+    ]
+)
+
+
+class SCRAMBase:
     """
-    The password-based SCRAM (non-PLUS) SASL mechanism (see :rfc:`5802`).
-
-    .. note::
-
-       As "non-PLUS" suggests, this does not support channel binding. Patches
-       welcome.
-
-       It may make sense to implement the -PLUS mechanisms as separate
-       :class:`SASLMechanism` subclass or at least allow disabling them via an
-       optional argument (defaulting to disabled). Channel binding may not be
-       reliably available in all cases.
-
-    `credential_provider` must be coroutine which returns a ``(user,
-    password)`` tuple.
+    Shared implementation of SCRAM and SCRAMPLUS.
     """
 
-    def __init__(self, credential_provider):
+    def __init__(self, credential_provider, *, nonce_length=15,
+                 enforce_minimum_iteration_count=True):
         super().__init__()
         self._credential_provider = credential_provider
-        self.nonce_length = 15
+        self.nonce_length = nonce_length
+        self.enforce_minimum_iteration_count = enforce_minimum_iteration_count
 
     _supported_hashalgos = {
         # the second argument is for preference ordering (highest first)
         # if anyone has a better hash ordering suggestion, I’m open for it
         # a value of 1 is added if the -PLUS variant is used
-        # -- JWI
-        "SHA-1": ("sha1", 1),
-        "SHA-224": ("sha224", 224),
-        "SHA-512": ("sha512", 512),
-        "SHA-384": ("sha384", 384),
-        "SHA-256": ("sha256", 256),
+        # -- JSC
+        # the minimum iteration count is obtained from
+        # <https://www.iana.org/assignments/sasl-mechanisms/sasl-mechanisms.xhtml>
+        "SHA-1": SCRAMHashInfo("sha1", 1, 4096),
+        "SHA-256": SCRAMHashInfo("sha256", 256, 4096),
     }
 
     @classmethod
@@ -537,18 +657,23 @@ class SCRAM(SASLMechanism):
         for mechanism in mechanisms:
             if not mechanism.startswith("SCRAM-"):
                 continue
-            if mechanism.endswith("-PLUS"):
-                # channel binding is not supported
-                continue
 
             hashfun_key = mechanism[6:]
 
+            if cls._channel_binding:
+                if not mechanism.endswith("-PLUS"):
+                    continue
+                hashfun_key = hashfun_key[:-5]
+            else:
+                if mechanism.endswith("-PLUS"):
+                    continue
+
             try:
-                hashfun_name, quality = cls._supported_hashalgos[hashfun_key]
+                info = cls._supported_hashalgos[hashfun_key]
             except KeyError:
                 continue
 
-            supported.append(((1, quality), (mechanism, hashfun_name,)))
+            supported.append(((1, info.quality), (mechanism, info,)))
 
         if not supported:
             return None
@@ -575,17 +700,15 @@ class SCRAM(SASLMechanism):
 
     @asyncio.coroutine
     def authenticate(self, sm, token):
-        mechanism, hashfun_name, = token
+        mechanism, info, = token
         logger.info("attempting %s mechanism (using %s hashfun)",
                     mechanism,
-                    hashfun_name)
+                    info)
         # this is pretty much a verbatim implementation of RFC 5802.
 
-        hashfun_factory = functools.partial(hashlib.new, hashfun_name)
-        digest_size = hashfun_factory().digest_size
+        hashfun_factory = functools.partial(hashlib.new, info.hashfun_name)
 
-        # we don’t support channel binding
-        gs2_header = b"n,,"
+        gs2_header = self._get_gs2_header()
         username, password = yield from self._credential_provider()
         username = saslprep(username).encode("utf8")
         password = saslprep(password).encode("utf8")
@@ -597,9 +720,15 @@ class SCRAM(SASLMechanism):
         ))
 
         auth_message = b"n=" + username + b",r=" + our_nonce
-        _, payload = yield from sm.initiate(
+        state, payload = yield from sm.initiate(
             mechanism,
             gs2_header + auth_message)
+
+        if state != SASLState.CHALLENGE or payload is None:
+            yield from sm.abort()
+            raise SASLFailure(
+                None,
+                text="protocol violation: expected challenge with payload")
 
         auth_message += b"," + payload
 
@@ -621,10 +750,22 @@ class SCRAM(SASLMechanism):
                 None,
                 text="server nonce doesn't fit our nonce")
 
+        if (self.enforce_minimum_iteration_count and
+                iteration_count < info.minimum_iteration_count):
+            raise SASLFailure(
+                None,
+                text="minimum iteration count for {} violated "
+                "({} is less than {})".format(
+                    mechanism,
+                    iteration_count,
+                    info.minimum_iteration_count,
+                )
+            )
+
         t0 = time.time()
 
         salted_password = pbkdf2(
-            hashfun_name,
+            info.hashfun_name,
             password,
             salt,
             iteration_count)
@@ -638,18 +779,16 @@ class SCRAM(SASLMechanism):
 
         stored_key = hashfun_factory(client_key).digest()
 
-        reply = b"c=" + base64.b64encode(b"n,,") + b",r=" + nonce
+        reply = b"c=" + base64.b64encode(self._get_cb_data()) + b",r=" + nonce
 
         auth_message += b"," + reply
 
-        client_proof = (
-            int.from_bytes(
-                hmac.new(
-                    stored_key,
-                    auth_message,
-                    hashfun_factory).digest(),
-                "big") ^
-            int.from_bytes(client_key, "big")).to_bytes(digest_size, "big")
+        client_proof = xor_bytes(
+            hmac.new(
+                stored_key,
+                auth_message,
+                hashfun_factory).digest(),
+            client_key)
 
         logger.debug("response generation time: %f seconds", time.time() - t0)
         try:
@@ -659,10 +798,18 @@ class SCRAM(SASLMechanism):
         except SASLFailure as err:
             raise err.promote_to_authentication_failure() from None
 
-        if state != "success":
+        # this is the pseudo-challenge for the server signature
+        # we have to reply with the empty string!
+        if state != SASLState.CHALLENGE:
             raise SASLFailure(
                 "malformed-request",
                 text="SCRAM protocol violation")
+
+        state, dummy_payload = yield from sm.response(b"")
+        if state != SASLState.SUCCESS or dummy_payload is not None:
+            raise SASLFailure(
+                None,
+                "SASL protocol violation")
 
         server_signature = hmac.new(
             hmac.new(
@@ -680,6 +827,143 @@ class SCRAM(SASLMechanism):
                 "authentication successful, but server signature invalid")
 
         return True
+
+
+class SCRAM(SCRAMBase, SASLMechanism):
+    """
+    The password-based SCRAM (non-PLUS) SASL mechanism (see :rfc:`5802`).
+
+    :param credential_provider: A coroutine function which returns credentials.
+    :param after_scram_plus: Flag to indicate that SCRAM-PLUS *is* supported by
+        your implementation.
+    :type after_scram_plus: :class:`bool`
+    :param enforce_minimum_iteration_count: Enforce the minimum iteration
+        count specified by the SCRAM specifications.
+    :type enforce_minimum_iteration_count: :class:`bool`
+
+    .. note::
+
+       As "non-PLUS" suggests, this does not support channel binding.
+       Use :class:`SCRAMPLUS` if you want channel binding.
+
+
+    `credential_provider` must be coroutine function which returns a ``(user,
+    password)`` tuple.
+
+    If this is used after :class:`SCRAMPLUS` in a method list, the
+    keyword argument `after_scram_plus` should be set to
+    :data:`True`. Then we will use the gs2 header ``y,,`` to prevent
+    down-grade attacks by a man-in-the-middle attacker.
+
+    `enforce_minimum_iteration_count` controls the enforcement of the specified
+    minimum iteration count for the key derivation function used in SCRAM. By
+    default, this enforcement is enabled, and you are strongly advised to not
+    disable it: it can be used to make the exchange weaker.
+
+    Disabling `enforce_minimum_iteration_count` only makes sense if the
+    authentication exchange would otherwise fall back to using :class:`PLAIN`
+    or a similarly weak authentication mechanism.
+
+    .. versionchanged:: 0.4
+
+        The `enforce_minimum_iteration_count` argument and the behaviour to
+        enforce the minimum iteration count by default was added.
+    """
+    _channel_binding = False
+
+    def __init__(self, credential_provider, *, after_scram_plus=False,
+                 **kwargs):
+        super().__init__(credential_provider, **kwargs)
+        self._after_scram_plus = after_scram_plus
+
+    def _get_gs2_header(self):
+        if self._after_scram_plus:
+            return b"y,,"
+        else:
+            return b"n,,"
+
+    def _get_cb_data(self):
+        return self._get_gs2_header()
+
+
+class ChannelBindingProvider(metaclass=abc.ABCMeta):
+    """
+    Interface for a channel binding method.
+
+    The needed external information is supplied to the constructors of
+    the specific instances.
+    """
+
+    @abc.abstractproperty
+    def cb_name(self):
+        """
+        Return the name of the channel-binding mechanism.
+        :rtype: :class:`bytes`
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def extract_cb_data(self):
+        """
+        Return the channel binding data.
+        :returns: the channel binding data
+        :rtype: :class:`bytes`
+        """
+        raise NotImplementedError
+
+
+class SCRAMPLUS(SCRAMBase, SASLMechanism):
+    """
+    The password-based SCRAM-PLUS SASL mechanism (see :rfc:`5802`).
+
+    :param credential_provider: A coroutine function which returns credentials.
+    :param cb_provider: Object which provides channel binding data and
+        information.
+    :type cb_provider: :class:`ChannelBindingProvider`
+    :param after_scram_plus: Flag to indicate that SCRAM-PLUS *is* supported by
+        your implementation.
+    :type after_scram_plus: :class:`bool`
+    :param enforce_minimum_iteration_count: Enforce the minimum iteration
+        count specified by the SCRAM specifications.
+    :type enforce_minimum_iteration_count: :class:`bool`
+
+    `credential_provider` must be coroutine which returns a ``(user,
+    password)`` tuple.
+
+    `cb_provider` must be an instance of
+    :class:`ChannelBindingProvider`, which specifies and implements
+    the channel binding type to use.
+
+    `enforce_minimum_iteration_count` controls the enforcement of the specified
+    minimum iteration count for the key derivation function used in SCRAM. By
+    default, this enforcement is enabled, and you are strongly advised to not
+    disable it: it can be used to make the exchange weaker.
+
+    .. seealso::
+
+        :class:`SCRAM` for more information on
+        `enforce_minimum_iteration_count`.
+
+    .. versionchanged:: 0.4
+
+        The `enforce_minimum_iteration_count` argument and the behaviour to
+        enforce the minimum iteration count by default was added.
+
+    """
+    _channel_binding = True
+
+    def __init__(self, credential_provider, cb_provider,
+                 **kwargs):
+        super().__init__(credential_provider, **kwargs)
+        self._cb_provider = cb_provider
+
+    def _get_gs2_header(self):
+        return b"p=" + self._cb_provider.cb_name + b",,"
+
+    def _get_cb_data(self):
+        gs2_header = self._get_gs2_header()
+        cb_data = self._cb_provider.extract_cb_data()
+        return gs2_header + cb_data
 
 
 class ANONYMOUS(SASLMechanism):
@@ -708,7 +992,7 @@ class ANONYMOUS(SASLMechanism):
             payload=self._token
         )
 
-        if state != "success":
+        if state != SASLState.SUCCESS:
             raise SASLFailure(
                 None,
                 text="SASL protocol violation")

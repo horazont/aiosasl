@@ -1,5 +1,5 @@
 ########################################################################
-# File name: version.py
+# File name: utils.py
 # This file is part of: aiosasl
 #
 # LICENSE
@@ -19,9 +19,14 @@
 # <http://www.gnu.org/licenses/>.
 #
 ########################################################################
-version_info = (0, 4, 0, None)
 
-__version__ = ".".join(map(str, version_info[:3])) + ("-"+version_info[3] if
-                                                      version_info[3] else "")
+import operator
 
-version = __version__
+
+def xor_bytes(a, b):
+    """
+    Calculate the byte wise exclusive of of two :class:`bytes` objects
+    of the same length.
+    """
+    assert len(a) == len(b)
+    return bytes(map(operator.xor, a, b))

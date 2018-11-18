@@ -20,6 +20,8 @@ API Reference
 
 .. automodule:: aiosasl
 
+.. automodule:: aiosasl.channel_binding_methods
+
 Indices and tables
 ==================
 

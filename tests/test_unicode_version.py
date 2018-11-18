@@ -1,5 +1,5 @@
 ########################################################################
-# File name: version.py
+# File name: test_unicode_version.py
 # This file is part of: aiosasl
 #
 # LICENSE
@@ -19,9 +19,12 @@
 # <http://www.gnu.org/licenses/>.
 #
 ########################################################################
-version_info = (0, 4, 0, None)
 
-__version__ = ".".join(map(str, version_info[:3])) + ("-"+version_info[3] if
-                                                      version_info[3] else "")
+import unittest
 
-version = __version__
+from aiosasl import stringprep
+
+class TestUnicodeVersion(unittest.TestCase):
+
+    def test_version(self):
+        self.assertEqual(stringprep.unicodedata.unidata_version, "3.2.0")
