@@ -644,7 +644,9 @@ class SCRAMBase:
         # the second argument is for preference ordering (highest first)
         # if anyone has a better hash ordering suggestion, I’m open for it
         # a value of 1 is added if the -PLUS variant is used
-        # -- JWI
+        # -- JSC
+        # the minimum iteration count is obtained from
+        # <https://www.iana.org/assignments/sasl-mechanisms/sasl-mechanisms.xhtml>
         "SHA-1": SCRAMHashInfo("sha1", 1, 4096),
         "SHA-256": SCRAMHashInfo("sha256", 256, 4096),
     }
