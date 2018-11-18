@@ -863,6 +863,11 @@ class SCRAM(SCRAMBase, SASLMechanism):
     Disabling `enforce_minimum_iteration_count` only makes sense if the
     authentication exchange would otherwise fall back to using :class:`PLAIN`
     or a similarly weak authentication mechanism.
+
+    .. versionchanged:: 0.4
+
+        The `enforce_minimum_iteration_count` argument and the behaviour to
+        enforce the minimum iteration count by default was added.
     """
     _channel_binding = False
 
@@ -938,6 +943,11 @@ class SCRAMPLUS(SCRAMBase, SASLMechanism):
 
         :class:`SCRAM` for more information on
         `enforce_minimum_iteration_count`.
+
+    .. versionchanged:: 0.4
+
+        The `enforce_minimum_iteration_count` argument and the behaviour to
+        enforce the minimum iteration count by default was added.
 
     """
     _channel_binding = True
