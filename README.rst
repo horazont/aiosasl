@@ -1,8 +1,8 @@
 ``aiosasl``, pure python generic asyncio SASL library
 #####################################################
 
-.. image:: https://travis-ci.org/horazont/aiosasl.svg?branch=devel
-  :target: https://travis-ci.org/horazont/aiosasl
+.. image:: https://travis-ci.com/horazont/aiosasl.svg?branch=devel
+  :target: https://travis-ci.com/horazont/aiosasl
 
 .. image:: https://coveralls.io/repos/github/horazont/aiosasl/badge.svg?branch=devel
   :target: https://coveralls.io/github/horazont/aiosasl?branch=devel
