@@ -19,7 +19,7 @@ setup(
     url="https://github.com/horazont/aiosasl",
     author="Jonas Wielicki",
     author_email="jonas@wielicki.name",
-    license="GPL",
+    license="LGPLv3+",
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
