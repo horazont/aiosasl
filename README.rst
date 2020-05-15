@@ -1,8 +1,8 @@
 ``aiosasl``, pure python generic asyncio SASL library
 #####################################################
 
-.. image:: https://travis-ci.org/horazont/aiosasl.svg?branch=devel
-  :target: https://travis-ci.org/horazont/aiosasl
+.. image:: https://travis-ci.com/horazont/aiosasl.svg?branch=devel
+  :target: https://travis-ci.com/horazont/aiosasl
 
 .. image:: https://coveralls.io/repos/github/horazont/aiosasl/badge.svg?branch=devel
   :target: https://coveralls.io/github/horazont/aiosasl?branch=devel
@@ -21,9 +21,8 @@ Supported SASL mechanisms
 
 * ``PLAIN``: authenticate with plaintext password (RFC 4616)
 * ``ANONYMOUS``: anonymous "authentication" (RFC 4505)
-* ``SCRAM-SHA-1``, ``SCRAM-SHA-224``, , ``SCRAM-SHA-512``, ``SCRAM-SHA-384``,
-  and ``SCRAM-SHA-256``: Salted Challenge Response Authentication (RFC 5802),
-  (and the ``-PLUS`` variants with channel binding).
+* ``SCRAM-SHA-1`` and ``SCRAM-SHA-256`` (and the ``-PLUS`` variants with
+  channel binding): Salted Challenge Response Authentication (RFC 5802)
 
 Documentation
 -------------
