@@ -21,7 +21,7 @@ setup(
     author_email="jonas@wielicki.name",
     license="GPL",
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3.4",
