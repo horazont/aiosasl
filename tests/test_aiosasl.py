@@ -383,6 +383,34 @@ class TestPLAIN(unittest.TestCase):
                 aiosasl.PLAIN(provide_credentials).authenticate(smmock, "PLAIN")
             )
 
+    def test_does_not_apply_saslprep(self):
+        user = "tim"
+        password = "2ø'±s;ßà¼Å"
+
+        smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
+            self,
+            [
+                ("auth;PLAIN",
+                 b"\0tim\0" + password.encode("utf-8"),
+                 "success",
+                 None)
+            ]))
+
+        @asyncio.coroutine
+        def provide_credentials(*args):
+            return user, password
+
+        def run():
+            plain = aiosasl.PLAIN(provide_credentials)
+            result = yield from plain.authenticate(
+                smmock,
+                "PLAIN")
+            self.assertTrue(result)
+
+        asyncio.get_event_loop().run_until_complete(run())
+
+        smmock.interface.finalize()
+
     def test_supports_PLAIN(self):
         self.assertEqual(
             "PLAIN",
