@@ -713,7 +713,7 @@ class SCRAMBase:
 
         gs2_header = self._get_gs2_header()
         username, password = yield from self._credential_provider()
-        username = saslprep(username).encode("utf8")
+        username = saslprep(username, allow_unassigned=True).encode("utf8")
         password = saslprep(password).encode("utf8")
 
         our_nonce = base64.b64encode(_system_random.getrandbits(

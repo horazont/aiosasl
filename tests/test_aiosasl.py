@@ -559,6 +559,7 @@ class TestSCRAMImpl:
         self.hashfun_factory = hashlib.sha1
         self.digest_size = self.hashfun_factory().digest_size
         self.user = b"user"
+        self.user2 = "user\U0001f916".encode("utf-8")
         self.password = b"pencil"
         self.salt = b"QSXCR+Q6sek8bf92"
 
@@ -613,6 +614,8 @@ class TestSCRAMImpl:
             self.client_key_5000).digest()
 
         self.client_first_message_bare = b"n=user,r=Zm9vAAAAAAAAAAAAAAAA"
+        self.client_first_message_bare2 = \
+            b"n="+self.user2+b",r=Zm9vAAAAAAAAAAAAAAAA"
         self.server_first_message = b"".join([
             b"r=Zm9vAAAAAAAAAAAAAAAA3rfcNHYJY1ZVvWVs7j,s=",
             base64.b64encode(self.salt),
@@ -648,6 +651,12 @@ class TestSCRAMImpl:
             self.client_final_message_without_proof
         ])
 
+        self.auth_message2 = b",".join([
+            self.client_first_message_bare2,
+            self.server_first_message,
+            self.client_final_message_without_proof
+        ])
+
         self.auth_message_4000 = b",".join([
             self.client_first_message_bare,
             self.server_first_message_4000,
@@ -665,6 +674,11 @@ class TestSCRAMImpl:
             self.auth_message,
             self.hashfun_factory).digest()
 
+        self.client_signature2 = hmac.new(
+            self.stored_key,
+            self.auth_message2,
+            self.hashfun_factory).digest()
+
         self.client_signature_4000 = hmac.new(
             self.stored_key_4000,
             self.auth_message_4000,
@@ -676,6 +690,7 @@ class TestSCRAMImpl:
             self.hashfun_factory).digest()
 
         self.client_proof = xor_bytes(self.client_signature, self.client_key)
+        self.client_proof2 = xor_bytes(self.client_signature2, self.client_key)
         self.client_proof_4000 = xor_bytes(self.client_signature_4000,
                                            self.client_key_4000)
         self.client_proof_5000 = xor_bytes(self.client_signature_5000,
@@ -696,6 +711,10 @@ class TestSCRAMImpl:
         self.server_signature = hmac.new(
             self.server_key,
             self.auth_message,
+            self.hashfun_factory).digest()
+        self.server_signature2 = hmac.new(
+            self.server_key,
+            self.auth_message2,
             self.hashfun_factory).digest()
         self.server_signature_4000 = hmac.new(
             self.server_key_4000,
@@ -754,6 +773,30 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
         self.assertTrue(self._run(
             smmock,
             aiosasl.SCRAM(self._provide_credentials)
+        ))
+
+    def test_unassigned_username_codepoints(self):
+        smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
+            self,
+            [
+                ("auth;SCRAM-SHA-1",
+                 b"n,,"+self.client_first_message_bare2,
+                 "challenge",
+                 self.server_first_message),
+                ("response",
+                 self.client_final_message_without_proof +
+                     b",p="+base64.b64encode(self.client_proof2),
+                 "success",
+                 b"v="+base64.b64encode(self.server_signature2))
+            ]))
+
+        @asyncio.coroutine
+        def provide_credentials(*args):
+            return (self.user2.decode("utf-8"), self.password.decode("utf-8"))
+
+        self.assertTrue(self._run(
+            smmock,
+            aiosasl.SCRAM(provide_credentials)
         ))
 
     def test_malformed_reply(self):
