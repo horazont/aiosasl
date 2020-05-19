@@ -775,6 +775,21 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
             aiosasl.SCRAM(self._provide_credentials)
         ))
 
+    def test_unassigned_password_codepoints(self):
+        smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
+            self,
+            []))
+
+        @asyncio.coroutine
+        def provide_credentials(*args):
+            return ("user", "\U0001f916")
+
+        with self.assertRaisesRegex(ValueError, "unassigned"):
+            self._run(
+                smmock,
+                aiosasl.SCRAM(provide_credentials)
+            )
+
     def test_unassigned_username_codepoints(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
             self,
