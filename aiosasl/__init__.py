@@ -603,8 +603,11 @@ class PLAIN(SASLMechanism):
     def authenticate(self, sm, mechanism):
         logger.info("attempting PLAIN mechanism")
         username, password = yield from self._credential_provider()
-        username = saslprep(username).encode("utf8")
-        password = saslprep(password).encode("utf8")
+        username = username.encode("utf8")
+        password = password.encode("utf8")
+
+        if b"\0" in username or b"\0" in password:
+            raise ValueError("NUL byte in username or password is disallowed")
 
         state, _ = yield from sm.initiate(
             mechanism="PLAIN",
@@ -710,7 +713,7 @@ class SCRAMBase:
 
         gs2_header = self._get_gs2_header()
         username, password = yield from self._credential_provider()
-        username = saslprep(username).encode("utf8")
+        username = saslprep(username, allow_unassigned=True).encode("utf8")
         password = saslprep(password).encode("utf8")
 
         our_nonce = base64.b64encode(_system_random.getrandbits(
