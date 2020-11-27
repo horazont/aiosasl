@@ -136,6 +136,8 @@ import logging
 import random
 import time
 
+from hashlib import pbkdf2_hmac as pbkdf2
+
 from aiosasl.stringprep import saslprep, trace
 from aiosasl.utils import xor_bytes
 
@@ -157,57 +159,6 @@ __version__ = __version__
 
 
 _system_random = random.SystemRandom()
-
-
-try:
-    from hashlib import pbkdf2_hmac as pbkdf2
-except ImportError:
-    # this is untested if you have pbkdf2_hmac
-    def pbkdf2(hashfun_name, input_data, salt, iterations, dklen=None):
-        """
-        Derivate a key from a password. `input_data` is taken as the bytes
-        object resembling the password (or other input). `hashfun` must be a
-        callable returning a :mod:`hashlib`-compatible hash function. `salt` is
-        the salt to be used in the PBKDF2 run, `iterations` the count of
-        iterations. `dklen` is the length in bytes of the key to be derived.
-
-        Return the derived key as :class:`bytes` object.
-        """
-
-        if dklen is not None and dklen <= 0:
-            raise ValueError("Invalid length for derived key: {}".format(
-                dklen))
-
-        hashfun = lambda: hashlib.new(hashfun_name)
-
-        hlen = hashfun().digest_size
-        if dklen is None:
-            dklen = hlen
-
-        block_count = (dklen + (hlen - 1)) // hlen
-
-        mac_base = hmac.new(input_data, None, hashfun)
-
-        def do_hmac(data):
-            mac = mac_base.copy()
-            mac.update(data)
-            return mac.digest()
-
-        def calc_block(i):
-            u_prev = do_hmac(salt + i.to_bytes(4, "big"))
-            u_accum = u_prev
-            for k in range(1, iterations):
-                u_curr = do_hmac(u_prev)
-                u_accum = xor_bytes(u_accum, u_curr)
-                u_prev = u_curr
-
-            return u_accum
-
-        result = b"".join(
-            calc_block(i)
-            for i in range(1, block_count + 1))
-
-        return result[:dklen]
 
 
 class SASLError(Exception):
