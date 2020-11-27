@@ -42,7 +42,7 @@ instances, let us call it ``mechanism_impls``) can be queried for support::
         if token is not None:
             sm = aiosasl.SASLStateMachine(intf)
             try:
-                yield from impl.authenticate(sm, token)
+                await impl.authenticate(sm, token)
             except aiosasl.AuthenticationFailure:
                 # handle authentication failure
                 # it is generally not sensible to re-try with other mechanisms
@@ -332,8 +332,7 @@ class SASLInterface(metaclass=abc.ABCMeta):
     """
 
     @abc.abstractmethod
-    @asyncio.coroutine
-    def initiate(self, mechanism, payload=None):
+    async def initiate(self, mechanism, payload=None):
         """
         Send a SASL initiation request for the given `mechanism`. Depending on
         the `mechanism`, an initial `payload` *may* be given. The `payload` is
@@ -345,8 +344,7 @@ class SASLInterface(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    @asyncio.coroutine
-    def respond(self, payload):
+    async def respond(self, payload):
         """
         Send a response to a challenge. The `payload` is a :class:`bytes`
         object which is to be sent as response.
@@ -356,8 +354,7 @@ class SASLInterface(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    @asyncio.coroutine
-    def abort(self):
+    async def abort(self):
         """
         Abort the authentication. The result is either the failure tuple
         (``(SASLState.FAILURE, None)``) or a :class:`SASLFailure` exception if
@@ -384,8 +381,7 @@ class SASLStateMachine:
         self.interface = interface
         self._state = SASLState.INITIAL
 
-    @asyncio.coroutine
-    def initiate(self, mechanism, payload=None):
+    async def initiate(self, mechanism, payload=None):
         """
         Initiate the SASL handshake and advertise the use of the given
         `mechanism`. If `payload` is not :data:`None`, it will be base64
@@ -400,7 +396,7 @@ class SASLStateMachine:
             raise RuntimeError("initiate has already been called")
 
         try:
-            next_state, payload = yield from self.interface.initiate(
+            next_state, payload = await self.interface.initiate(
                 mechanism,
                 payload=payload)
         except SASLFailure:
@@ -411,8 +407,7 @@ class SASLStateMachine:
         self._state = next_state
         return next_state, payload
 
-    @asyncio.coroutine
-    def response(self, payload):
+    async def response(self, payload):
         """
         Send a response to the previously received challenge, with the given
         `payload`. The payload is encoded using base64 and transmitted to the
@@ -442,7 +437,7 @@ class SASLStateMachine:
                 "no challenge has been made or negotiation failed")
 
         try:
-            next_state, payload = yield from self.interface.respond(payload)
+            next_state, payload = await self.interface.respond(payload)
         except SASLFailure:
             self._state = SASLState.FAILURE
             raise
@@ -459,8 +454,7 @@ class SASLStateMachine:
         self._state = next_state
         return next_state, payload
 
-    @asyncio.coroutine
-    def abort(self):
+    async def abort(self):
         """
         Abort an initiated SASL authentication process. The expected result
         state is ``failure``.
@@ -472,7 +466,7 @@ class SASLStateMachine:
             raise RuntimeError("SASL message exchange already over")
 
         try:
-            return (yield from self.interface.abort())
+            return await self.interface.abort()
         finally:
             self._state = SASLState.FAILURE
 
@@ -512,9 +506,7 @@ class SASLMechanism(metaclass=abc.ABCMeta):
         :data:`None` value.
         """
 
-    @asyncio.coroutine
-    @abc.abstractmethod
-    def authenticate(self, sm, token):
+    async def authenticate(self, sm, token):
         """
         Execute the mechanism identified by `token` (the non-:data:`None` value
         which has been returned by :meth:`any_supported` before) using the
@@ -550,17 +542,16 @@ class PLAIN(SASLMechanism):
             return "PLAIN"
         return None
 
-    @asyncio.coroutine
-    def authenticate(self, sm, mechanism):
+    async def authenticate(self, sm, mechanism):
         logger.info("attempting PLAIN mechanism")
-        username, password = yield from self._credential_provider()
+        username, password = await self._credential_provider()
         username = username.encode("utf8")
         password = password.encode("utf8")
 
         if b"\0" in username or b"\0" in password:
             raise ValueError("NUL byte in username or password is disallowed")
 
-        state, _ = yield from sm.initiate(
+        state, _ = await sm.initiate(
             mechanism="PLAIN",
             payload=b"\0" + username + b"\0" + password)
 
@@ -652,8 +643,7 @@ class SCRAMBase:
 
             yield key, value
 
-    @asyncio.coroutine
-    def authenticate(self, sm, token):
+    async def authenticate(self, sm, token):
         mechanism, info, = token
         logger.info("attempting %s mechanism (using %s hashfun)",
                     mechanism,
@@ -663,7 +653,7 @@ class SCRAMBase:
         hashfun_factory = functools.partial(hashlib.new, info.hashfun_name)
 
         gs2_header = self._get_gs2_header()
-        username, password = yield from self._credential_provider()
+        username, password = await self._credential_provider()
         username = saslprep(username, allow_unassigned=True).encode("utf8")
         password = saslprep(password).encode("utf8")
 
@@ -674,12 +664,12 @@ class SCRAMBase:
         ))
 
         auth_message = b"n=" + username + b",r=" + our_nonce
-        state, payload = yield from sm.initiate(
+        state, payload = await sm.initiate(
             mechanism,
             gs2_header + auth_message)
 
         if state != SASLState.CHALLENGE or payload is None:
-            yield from sm.abort()
+            await sm.abort()
             raise SASLFailure(
                 None,
                 text="protocol violation: expected challenge with payload")
@@ -693,13 +683,13 @@ class SCRAMBase:
             nonce = payload[b"r"]
             salt = base64.b64decode(payload[b"s"])
         except (ValueError, KeyError):
-            yield from sm.abort()
+            await sm.abort()
             raise SASLFailure(
                 None,
                 text="malformed server message: {!r}".format(payload))
 
         if not nonce.startswith(our_nonce):
-            yield from sm.abort()
+            await sm.abort()
             raise SASLFailure(
                 None,
                 text="server nonce doesn't fit our nonce")
@@ -746,7 +736,7 @@ class SCRAMBase:
 
         logger.debug("response generation time: %f seconds", time.time() - t0)
         try:
-            state, payload = yield from sm.response(
+            state, payload = await sm.response(
                 reply + b",p=" + base64.b64encode(client_proof)
             )
         except SASLFailure as err:
@@ -759,7 +749,7 @@ class SCRAMBase:
                 "malformed-request",
                 text="SCRAM protocol violation")
 
-        state, dummy_payload = yield from sm.response(b"")
+        state, dummy_payload = await sm.response(b"")
         if state != SASLState.SUCCESS or dummy_payload is not None:
             raise SASLFailure(
                 None,
@@ -937,11 +927,10 @@ class ANONYMOUS(SASLMechanism):
             return "ANONYMOUS"
         return None
 
-    @asyncio.coroutine
-    def authenticate(self, sm, mechanism):
+    async def authenticate(self, sm, mechanism):
         logger.info("attempting ANONYMOUS mechanism")
 
-        state, _ = yield from sm.initiate(
+        state, _ = await sm.initiate(
             mechanism="ANONYMOUS",
             payload=self._token
         )
