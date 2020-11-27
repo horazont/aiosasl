@@ -32,21 +32,28 @@ This module implements the SASLprep (`RFC 4013`_) stringprep profile.
 """
 
 import stringprep
+import typing
 
 from unicodedata import ucd_3_2_0 as unicodedata
 
 _nodeprep_prohibited = frozenset("\"&'/:<>@")
 
 
-def is_RandALCat(c):
+def is_RandALCat(c: str) -> bool:
     return unicodedata.bidirectional(c) in ("R", "AL")
 
 
-def is_LCat(c):
+def is_LCat(c: str) -> bool:
     return unicodedata.bidirectional(c) == "L"
 
 
-def check_against_tables(chars, tables):
+TablePredicate = typing.Callable[[str], bool]
+
+
+def check_against_tables(
+        chars: typing.Iterable[str],
+        tables: typing.Iterable[TablePredicate],
+        ) -> typing.Optional[str]:
     """
     Perform a check against the table predicates in `tables`. `tables` must be
     a reusable iterable containing characteristic functions of character sets,
@@ -64,7 +71,7 @@ def check_against_tables(chars, tables):
     return None
 
 
-def do_normalization(chars):
+def do_normalization(chars: typing.MutableSequence[str]) -> None:
     """
     Perform the stringprep normalization. Operates in-place on a list of
     unicode characters provided in `chars`.
@@ -72,7 +79,7 @@ def do_normalization(chars):
     chars[:] = list(unicodedata.normalize("NFKC", "".join(chars)))
 
 
-def check_bidi(chars):
+def check_bidi(chars: typing.Sequence[str]) -> None:
     """
     Check proper bidirectionality as per stringprep. Operates on a list of
     unicode characters provided in `chars`.
@@ -98,7 +105,9 @@ def check_bidi(chars):
         raise ValueError("R/AL string must start and end with R/AL character.")
 
 
-def check_prohibited_output(chars, bad_tables):
+def check_prohibited_output(
+        chars: typing.Sequence[str],
+        bad_tables: typing.Iterable[TablePredicate]) -> None:
     """
     Check against prohibited output, by checking whether any of the characters
     from `chars` are in any of the `bad_tables`.
@@ -111,7 +120,8 @@ def check_prohibited_output(chars, bad_tables):
                          "U+{:04x}".format(ord(violator)))
 
 
-def check_unassigned(chars, bad_tables):
+def check_unassigned(chars: typing.Sequence[str],
+                     bad_tables: typing.Iterable[TablePredicate]) -> None:
     """
     Check that `chars` does not contain any unassigned code points as per
     the given list of `bad_tables`.
@@ -127,7 +137,7 @@ def check_unassigned(chars, bad_tables):
                          "U+{:04x}".format(ord(violator)))
 
 
-def _saslprep_do_mapping(chars):
+def _saslprep_do_mapping(chars: typing.MutableSequence[str]) -> None:
     """
     Perform the stringprep mapping step of SASLprep. Operates in-place on a
     list of unicode characters provided in `chars`.
@@ -143,7 +153,8 @@ def _saslprep_do_mapping(chars):
         i += 1
 
 
-def saslprep(string, allow_unassigned=False):
+def saslprep(string: str,
+             allow_unassigned: bool = False) -> str:
     """
     Process the given `string` using the SASLprep profile. In the error cases
     defined in `RFC 3454`_ (stringprep), a :class:`ValueError` is raised.
@@ -180,7 +191,7 @@ def saslprep(string, allow_unassigned=False):
     return "".join(chars)
 
 
-def trace(string):
+def trace(string: str) -> str:
     """
     Implement the ``trace`` profile specified in :rfc:`4505`.
     """

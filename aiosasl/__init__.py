@@ -135,6 +135,7 @@ import hmac
 import logging
 import random
 import time
+import typing
 
 from hashlib import pbkdf2_hmac as pbkdf2
 
@@ -186,7 +187,11 @@ class SASLError(Exception):
 
     """
 
-    def __init__(self, opaque_error, kind, text=None):
+    def __init__(
+            self,
+            opaque_error: typing.Any,
+            kind: str,
+            text: typing.Optional[str] = None):
         msg = "{}: {}".format(opaque_error, kind)
         if text:
             msg += ": {}".format(text)
@@ -195,29 +200,35 @@ class SASLError(Exception):
         self.text = text
 
 
-class SASLFailure(SASLError):
-    """
-    A SASL protocol failure which is unrelated to the credentials passed. This
-    may be raised by :class:`SASLInterface` methods.
-    """
-
-    def __init__(self, opaque_error, text=None):
-        super().__init__(opaque_error, "SASL failure", text=text)
-
-    def promote_to_authentication_failure(self):
-        return AuthenticationFailure(
-            self.opaque_error,
-            self.text)
-
-
 class AuthenticationFailure(SASLError):
     """
     A SASL error which indicates that the provided credentials are
     invalid. This may be raised by :class:`SASLInterface` methods.
     """
 
-    def __init__(self, opaque_error, text=None):
+    def __init__(
+            self,
+            opaque_error: typing.Any,
+            text: typing.Optional[str] = None):
         super().__init__(opaque_error, "authentication failed", text=text)
+
+
+class SASLFailure(SASLError):
+    """
+    A SASL protocol failure which is unrelated to the credentials passed. This
+    may be raised by :class:`SASLInterface` methods.
+    """
+
+    def __init__(
+            self,
+            opaque_error: typing.Any,
+            text: typing.Optional[str] = None):
+        super().__init__(opaque_error, "SASL failure", text=text)
+
+    def promote_to_authentication_failure(self) -> AuthenticationFailure:
+        return AuthenticationFailure(
+            self.opaque_error,
+            self.text)
 
 
 class SASLState(enum.Enum):
@@ -264,7 +275,7 @@ class SASLState(enum.Enum):
     SUCCESS_SIMULATE_CHALLENGE = "success-simulate-challenge"
 
     @classmethod
-    def from_reply(cls, state):
+    def from_reply(cls, state: "SASLState") -> "SASLState":
         """
         Comptaibility layer for old :class:`SASLInterface`
         implementations.
@@ -289,6 +300,9 @@ class SASLState(enum.Enum):
             return SASLState(state)
         else:
             raise RuntimeError("invalid SASL state", state)
+
+
+NextStateTuple = typing.Tuple[SASLState, typing.Optional[bytes]]
 
 
 class SASLInterface(metaclass=abc.ABCMeta):
@@ -332,7 +346,11 @@ class SASLInterface(metaclass=abc.ABCMeta):
     """
 
     @abc.abstractmethod
-    async def initiate(self, mechanism, payload=None):
+    async def initiate(
+            self,
+            mechanism: str,
+            payload: typing.Optional[bytes] = None,
+            ) -> NextStateTuple:
         """
         Send a SASL initiation request for the given `mechanism`. Depending on
         the `mechanism`, an initial `payload` *may* be given. The `payload` is
@@ -344,7 +362,10 @@ class SASLInterface(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    async def respond(self, payload):
+    async def respond(
+            self,
+            payload: bytes,
+            ) -> NextStateTuple:
         """
         Send a response to a challenge. The `payload` is a :class:`bytes`
         object which is to be sent as response.
@@ -354,7 +375,7 @@ class SASLInterface(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    async def abort(self):
+    async def abort(self) -> None:
         """
         Abort the authentication. The result is either the failure tuple
         (``(SASLState.FAILURE, None)``) or a :class:`SASLFailure` exception if
@@ -376,12 +397,16 @@ class SASLStateMachine:
     The initial state is never returned.
     """
 
-    def __init__(self, interface):
+    def __init__(self, interface: "SASLInterface"):
         super().__init__()
         self.interface = interface
         self._state = SASLState.INITIAL
 
-    async def initiate(self, mechanism, payload=None):
+    async def initiate(
+            self,
+            mechanism: str,
+            payload: typing.Optional[bytes] = None,
+            ) -> NextStateTuple:
         """
         Initiate the SASL handshake and advertise the use of the given
         `mechanism`. If `payload` is not :data:`None`, it will be base64
@@ -407,7 +432,10 @@ class SASLStateMachine:
         self._state = next_state
         return next_state, payload
 
-    async def response(self, payload):
+    async def response(
+            self,
+            payload: bytes,
+            ) -> NextStateTuple:
         """
         Send a response to the previously received challenge, with the given
         `payload`. The payload is encoded using base64 and transmitted to the
@@ -437,7 +465,9 @@ class SASLStateMachine:
                 "no challenge has been made or negotiation failed")
 
         try:
-            next_state, payload = await self.interface.respond(payload)
+            next_state, response_payload = await self.interface.respond(
+                payload,
+            )
         except SASLFailure:
             self._state = SASLState.FAILURE
             raise
@@ -447,14 +477,14 @@ class SASLStateMachine:
         # unfold the (SASLState.SUCCESS, payload) to a sequence of
         # (SASLState.CHALLENGE, payload), (SASLState.SUCCESS, None) for the SASLMethod
         # to allow uniform treatment of both cases
-        if next_state == SASLState.SUCCESS and payload is not None:
+        if next_state == SASLState.SUCCESS and response_payload is not None:
             self._state = SASLState.SUCCESS_SIMULATE_CHALLENGE
-            return SASLState.CHALLENGE, payload
+            return SASLState.CHALLENGE, response_payload
 
         self._state = next_state
-        return next_state, payload
+        return next_state, response_payload
 
-    async def abort(self):
+    async def abort(self) -> None:
         """
         Abort an initiated SASL authentication process. The expected result
         state is ``failure``.
@@ -487,7 +517,10 @@ class SASLMechanism(metaclass=abc.ABCMeta):
     """
 
     @abc.abstractclassmethod
-    def any_supported(cls, mechanisms):
+    def any_supported(
+            cls,
+            mechanisms: typing.Collection[str],
+            ) -> typing.Any:
         """
         Determine whether this class can perform any SASL mechanism in the set
         of strings ``mechanisms``.
@@ -506,7 +539,11 @@ class SASLMechanism(metaclass=abc.ABCMeta):
         :data:`None` value.
         """
 
-    async def authenticate(self, sm, token):
+    async def authenticate(
+            self,
+            sm: SASLStateMachine,
+            token: typing.Any,
+            ) -> None:
         """
         Execute the mechanism identified by `token` (the non-:data:`None` value
         which has been returned by :meth:`any_supported` before) using the
@@ -516,6 +553,11 @@ class SASLMechanism(metaclass=abc.ABCMeta):
         (:class:`AuthenticationFailure`). If the authentication fails for a
         reason unrelated to credentials, :class:`SASLFailure` is raised.
         """
+
+
+CredentialProvider = typing.Callable[
+    [], typing.Coroutine[typing.Any, typing.Any, typing.Tuple[str, str]]
+]
 
 
 class PLAIN(SASLMechanism):
@@ -532,35 +574,41 @@ class PLAIN(SASLMechanism):
     `credential_provider` must be coroutine which returns a ``(user,
     password)`` tuple.
     """
-    def __init__(self, credential_provider):
+    def __init__(self, credential_provider: CredentialProvider):
         super().__init__()
         self._credential_provider = credential_provider
 
     @classmethod
-    def any_supported(cls, mechanisms):
+    def any_supported(
+            cls,
+            mechanisms: typing.Collection[str],
+            ) -> typing.Any:
         if "PLAIN" in mechanisms:
             return "PLAIN"
         return None
 
-    async def authenticate(self, sm, mechanism):
+    async def authenticate(
+            self,
+            sm: SASLStateMachine,
+            mechanism: typing.Any,
+            ) -> None:
         logger.info("attempting PLAIN mechanism")
         username, password = await self._credential_provider()
-        username = username.encode("utf8")
-        password = password.encode("utf8")
+        encoded_username = username.encode("utf8")
+        encoded_password = password.encode("utf8")
 
-        if b"\0" in username or b"\0" in password:
+        if b"\0" in encoded_username or b"\0" in encoded_password:
             raise ValueError("NUL byte in username or password is disallowed")
 
         state, _ = await sm.initiate(
             mechanism="PLAIN",
-            payload=b"\0" + username + b"\0" + password)
+            payload=b"\0" + encoded_username + b"\0" + encoded_password,
+        )
 
         if state != SASLState.SUCCESS:
             raise SASLFailure(
                 None,
                 text="SASL protocol violation")
-
-        return True
 
 
 SCRAMHashInfo = collections.namedtuple(
@@ -578,8 +626,14 @@ class SCRAMBase:
     Shared implementation of SCRAM and SCRAMPLUS.
     """
 
-    def __init__(self, credential_provider, *, nonce_length=15,
-                 enforce_minimum_iteration_count=True):
+    _channel_binding = False
+
+    def __init__(
+            self,
+            credential_provider: CredentialProvider,
+            *,
+            nonce_length: int = 15,
+            enforce_minimum_iteration_count: bool = True):
         super().__init__()
         self._credential_provider = credential_provider
         self.nonce_length = nonce_length
@@ -597,7 +651,10 @@ class SCRAMBase:
     }
 
     @classmethod
-    def any_supported(cls, mechanisms):
+    def any_supported(
+            cls,
+            mechanisms: typing.Collection[str],
+            ) -> typing.Optional[typing.Tuple[str, SCRAMHashInfo]]:
         supported = []
         for mechanism in mechanisms:
             if not mechanism.startswith("SCRAM-"):
@@ -627,7 +684,10 @@ class SCRAMBase:
         return supported.pop()[1]
 
     @classmethod
-    def parse_message(cls, msg):
+    def parse_message(
+            cls,
+            msg: bytes,
+            ) -> typing.Generator[typing.Tuple[bytes, bytes], None, None]:
         parts = (
             part
             for part in msg.split(b",")
@@ -643,7 +703,19 @@ class SCRAMBase:
 
             yield key, value
 
-    async def authenticate(self, sm, token):
+    @abc.abstractmethod
+    def _get_gs2_header(self) -> bytes:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _get_cb_data(self) -> bytes:
+        raise NotImplementedError
+
+    async def authenticate(
+            self,
+            sm: SASLStateMachine,
+            token: typing.Tuple[str, SCRAMHashInfo],
+            ) -> None:
         mechanism, info, = token
         logger.info("attempting %s mechanism (using %s hashfun)",
                     mechanism,
@@ -654,8 +726,11 @@ class SCRAMBase:
 
         gs2_header = self._get_gs2_header()
         username, password = await self._credential_provider()
-        username = saslprep(username, allow_unassigned=True).encode("utf8")
-        password = saslprep(password).encode("utf8")
+        encoded_username = saslprep(
+            username,
+            allow_unassigned=True,
+        ).encode("utf-8")
+        encoded_password = saslprep(password).encode("utf-8")
 
         our_nonce = base64.b64encode(_system_random.getrandbits(
             self.nonce_length * 8
@@ -663,7 +738,7 @@ class SCRAMBase:
             self.nonce_length, "little"
         ))
 
-        auth_message = b"n=" + username + b",r=" + our_nonce
+        auth_message = b"n=" + encoded_username + b",r=" + our_nonce
         state, payload = await sm.initiate(
             mechanism,
             gs2_header + auth_message)
@@ -676,17 +751,18 @@ class SCRAMBase:
 
         auth_message += b"," + payload
 
-        payload = dict(self.parse_message(payload))
+        parsed_payload = dict(self.parse_message(payload))
 
         try:
-            iteration_count = int(payload[b"i"])
-            nonce = payload[b"r"]
-            salt = base64.b64decode(payload[b"s"])
+            iteration_count = int(parsed_payload[b"i"])
+            nonce = parsed_payload[b"r"]
+            salt = base64.b64decode(parsed_payload[b"s"])
         except (ValueError, KeyError):
             await sm.abort()
             raise SASLFailure(
                 None,
-                text="malformed server message: {!r}".format(payload))
+                text="malformed server message: {!r}".format(payload),
+            )
 
         if not nonce.startswith(our_nonce):
             await sm.abort()
@@ -710,7 +786,7 @@ class SCRAMBase:
 
         salted_password = pbkdf2(
             info.hashfun_name,
-            password,
+            encoded_password,
             salt,
             iteration_count)
 
@@ -763,14 +839,13 @@ class SCRAMBase:
             auth_message,
             hashfun_factory).digest()
 
-        payload = dict(self.parse_message(payload))
+        parsed_payload = dict(self.parse_message(payload or b""))
 
-        if base64.b64decode(payload[b"v"]) != server_signature:
+        if base64.b64decode(parsed_payload[b"v"]) != server_signature:
             raise SASLFailure(
                 None,
-                "authentication successful, but server signature invalid")
-
-        return True
+                "authentication successful, but server signature invalid",
+            )
 
 
 class SCRAM(SCRAMBase, SASLMechanism):
@@ -813,20 +888,23 @@ class SCRAM(SCRAMBase, SASLMechanism):
         The `enforce_minimum_iteration_count` argument and the behaviour to
         enforce the minimum iteration count by default was added.
     """
-    _channel_binding = False
 
-    def __init__(self, credential_provider, *, after_scram_plus=False,
-                 **kwargs):
+    def __init__(
+            self,
+            credential_provider: CredentialProvider,
+            *,
+            after_scram_plus: bool = False,
+            **kwargs: typing.Any):
         super().__init__(credential_provider, **kwargs)
         self._after_scram_plus = after_scram_plus
 
-    def _get_gs2_header(self):
+    def _get_gs2_header(self) -> bytes:
         if self._after_scram_plus:
             return b"y,,"
         else:
             return b"n,,"
 
-    def _get_cb_data(self):
+    def _get_cb_data(self) -> bytes:
         return self._get_gs2_header()
 
 
@@ -839,7 +917,7 @@ class ChannelBindingProvider(metaclass=abc.ABCMeta):
     """
 
     @abc.abstractproperty
-    def cb_name(self):
+    def cb_name(self) -> bytes:
         """
         Return the name of the channel-binding mechanism.
         :rtype: :class:`bytes`
@@ -847,7 +925,7 @@ class ChannelBindingProvider(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def extract_cb_data(self):
+    def extract_cb_data(self) -> bytes:
         """
         Return the channel binding data.
         :returns: the channel binding data
@@ -896,15 +974,17 @@ class SCRAMPLUS(SCRAMBase, SASLMechanism):
     """
     _channel_binding = True
 
-    def __init__(self, credential_provider, cb_provider,
-                 **kwargs):
+    def __init__(self,
+                 credential_provider: CredentialProvider,
+                 cb_provider: ChannelBindingProvider,
+                 **kwargs: typing.Any):
         super().__init__(credential_provider, **kwargs)
         self._cb_provider = cb_provider
 
-    def _get_gs2_header(self):
+    def _get_gs2_header(self) -> bytes:
         return b"p=" + self._cb_provider.cb_name + b",,"
 
-    def _get_cb_data(self):
+    def _get_cb_data(self) -> bytes:
         gs2_header = self._get_gs2_header()
         cb_data = self._cb_provider.extract_cb_data()
         return gs2_header + cb_data
@@ -917,17 +997,23 @@ class ANONYMOUS(SASLMechanism):
     .. versionadded:: 0.3
     """
 
-    def __init__(self, token):
+    def __init__(self, token: str) -> None:
         super().__init__()
         self._token = trace(token).encode("utf-8")
 
     @classmethod
-    def any_supported(self, mechanisms):
+    def any_supported(
+            self,
+            mechanisms: typing.Collection[str],
+            ) -> typing.Optional[str]:
         if "ANONYMOUS" in mechanisms:
             return "ANONYMOUS"
         return None
 
-    async def authenticate(self, sm, mechanism):
+    async def authenticate(
+            self,
+            sm: SASLStateMachine,
+            mechanism: typing.Any) -> None:
         logger.info("attempting ANONYMOUS mechanism")
 
         state, _ = await sm.initiate(
@@ -939,5 +1025,3 @@ class ANONYMOUS(SASLMechanism):
             raise SASLFailure(
                 None,
                 text="SASL protocol violation")
-
-        return True

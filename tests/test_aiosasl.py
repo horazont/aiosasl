@@ -304,10 +304,10 @@ class TestPLAIN(unittest.TestCase):
 
         async def run():
             plain = aiosasl.PLAIN(provide_credentials)
-            result = await plain.authenticate(
+            await plain.authenticate(
                 smmock,
-                "PLAIN")
-            self.assertTrue(result)
+                "PLAIN",
+            )
 
         asyncio.get_event_loop().run_until_complete(run())
 
@@ -394,10 +394,10 @@ class TestPLAIN(unittest.TestCase):
 
         async def run():
             plain = aiosasl.PLAIN(provide_credentials)
-            result = await plain.authenticate(
+            await plain.authenticate(
                 smmock,
-                "PLAIN")
-            self.assertTrue(result)
+                "PLAIN",
+            )
 
         asyncio.get_event_loop().run_until_complete(run())
 
@@ -761,10 +761,10 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  b"v="+base64.b64encode(self.server_signature))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(self._provide_credentials)
-        ))
+        )
 
     def test_unassigned_password_codepoints(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
@@ -798,10 +798,10 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
         async def provide_credentials(*args):
             return (self.user2.decode("utf-8"), self.password.decode("utf-8"))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(provide_credentials)
-        ))
+        )
 
     def test_malformed_reply(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
@@ -989,13 +989,13 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  b"v="+base64.b64encode(self.server_signature_4000))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(
                 self._provide_credentials,
                 enforce_minimum_iteration_count=False,
             )
-        ))
+        )
 
     def test_high_iteration_count(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
@@ -1012,10 +1012,10 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  b"v="+base64.b64encode(self.server_signature_5000))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(self._provide_credentials)
-        ))
+        )
 
 
 class TestSCRAMDowngradeProtection(TestSCRAMImpl, unittest.TestCase):
@@ -1036,10 +1036,10 @@ class TestSCRAMDowngradeProtection(TestSCRAMImpl, unittest.TestCase):
                  b"v="+base64.b64encode(self.server_signature))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(self._provide_credentials, after_scram_plus=True)
-        ))
+        )
 
 
 class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
@@ -1060,13 +1060,13 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  b"v="+base64.b64encode(self.server_signature))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAMPLUS(
                 self._provide_credentials,
                 TLSUnique(self._tls_connection)
             )
-        ))
+        )
 
     def test_malformed_reply(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
@@ -1258,10 +1258,9 @@ class TestANONYMOUS(unittest.TestCase):
             ]))
 
         async def run():
-            result = await anon.authenticate(
+            await anon.authenticate(
                 smmock,
                 "ANONYMOUS")
-            self.assertTrue(result)
 
         run_coroutine(run())
 
@@ -1279,10 +1278,9 @@ class TestANONYMOUS(unittest.TestCase):
 
         async def run():
             anon = aiosasl.ANONYMOUS("sirhc")
-            result = await anon.authenticate(
+            await anon.authenticate(
                 smmock,
                 "ANONYMOUS")
-            self.assertTrue(result)
 
         run_coroutine(run())
 
