@@ -91,16 +91,13 @@ class SASLInterfaceMock(aiosasl.SASLInterface):
 
         return new_state, result_payload
 
-    @asyncio.coroutine
-    def initiate(self, mechanism, payload=None):
+    async def initiate(self, mechanism, payload=None):
         return self._check_action("auth;"+mechanism, payload)
 
-    @asyncio.coroutine
-    def respond(self, payload):
+    async def respond(self, payload):
         return self._check_action("response", payload)
 
-    @asyncio.coroutine
-    def abort(self):
+    async def abort(self):
         return self._check_action("abort", None)
 
     def finalize(self):
@@ -302,16 +299,15 @@ class TestPLAIN(unittest.TestCase):
                  None)
             ]))
 
-        @asyncio.coroutine
-        def provide_credentials(*args):
+        async def provide_credentials(*args):
             return user, password
 
-        def run():
+        async def run():
             plain = aiosasl.PLAIN(provide_credentials)
-            result = yield from plain.authenticate(
+            await plain.authenticate(
                 smmock,
-                "PLAIN")
-            self.assertTrue(result)
+                "PLAIN",
+            )
 
         asyncio.get_event_loop().run_until_complete(run())
 
@@ -330,13 +326,12 @@ class TestPLAIN(unittest.TestCase):
                  b"foo")
             ]))
 
-        @asyncio.coroutine
-        def provide_credentials(*args):
+        async def provide_credentials(*args):
             return user, password
 
-        def run():
+        async def run():
             plain = aiosasl.PLAIN(provide_credentials)
-            yield from plain.authenticate(
+            await plain.authenticate(
                 smmock,
                 "PLAIN")
 
@@ -357,8 +352,7 @@ class TestPLAIN(unittest.TestCase):
             [
             ]))
 
-        @asyncio.coroutine
-        def provide_credentials(*args):
+        async def provide_credentials(*args):
             return "\0", "foo"
 
         with self.assertRaises(ValueError):
@@ -374,8 +368,7 @@ class TestPLAIN(unittest.TestCase):
             [
             ]))
 
-        @asyncio.coroutine
-        def provide_credentials(*args):
+        async def provide_credentials(*args):
             return "foo", "\0"
 
         with self.assertRaises(ValueError):
@@ -396,16 +389,15 @@ class TestPLAIN(unittest.TestCase):
                  None)
             ]))
 
-        @asyncio.coroutine
-        def provide_credentials(*args):
+        async def provide_credentials(*args):
             return user, password
 
-        def run():
+        async def run():
             plain = aiosasl.PLAIN(provide_credentials)
-            result = yield from plain.authenticate(
+            await plain.authenticate(
                 smmock,
-                "PLAIN")
-            self.assertTrue(result)
+                "PLAIN",
+            )
 
         asyncio.get_event_loop().run_until_complete(run())
 
@@ -730,8 +722,7 @@ class TestSCRAMImpl:
         self._tls_connection.get_finished.return_value = \
             b'channel binding data'
 
-    @asyncio.coroutine
-    def _provide_credentials(self, *args):
+    async def _provide_credentials(self, *args):
         return ("user", "pencil")
 
     def _run(self, smmock, scram):
@@ -770,18 +761,17 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  b"v="+base64.b64encode(self.server_signature))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(self._provide_credentials)
-        ))
+        )
 
     def test_unassigned_password_codepoints(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
             self,
             []))
 
-        @asyncio.coroutine
-        def provide_credentials(*args):
+        async def provide_credentials(*args):
             return ("user", "\U0001f916")
 
         with self.assertRaisesRegex(ValueError, "unassigned"):
@@ -805,14 +795,13 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  b"v="+base64.b64encode(self.server_signature2))
             ]))
 
-        @asyncio.coroutine
-        def provide_credentials(*args):
+        async def provide_credentials(*args):
             return (self.user2.decode("utf-8"), self.password.decode("utf-8"))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(provide_credentials)
-        ))
+        )
 
     def test_malformed_reply(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
@@ -1000,13 +989,13 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  b"v="+base64.b64encode(self.server_signature_4000))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(
                 self._provide_credentials,
                 enforce_minimum_iteration_count=False,
             )
-        ))
+        )
 
     def test_high_iteration_count(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
@@ -1023,10 +1012,10 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  b"v="+base64.b64encode(self.server_signature_5000))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(self._provide_credentials)
-        ))
+        )
 
 
 class TestSCRAMDowngradeProtection(TestSCRAMImpl, unittest.TestCase):
@@ -1047,10 +1036,10 @@ class TestSCRAMDowngradeProtection(TestSCRAMImpl, unittest.TestCase):
                  b"v="+base64.b64encode(self.server_signature))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(self._provide_credentials, after_scram_plus=True)
-        ))
+        )
 
 
 class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
@@ -1071,13 +1060,13 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  b"v="+base64.b64encode(self.server_signature))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAMPLUS(
                 self._provide_credentials,
                 TLSUnique(self._tls_connection)
             )
-        ))
+        )
 
     def test_malformed_reply(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
@@ -1268,13 +1257,12 @@ class TestANONYMOUS(unittest.TestCase):
                  None)
             ]))
 
-        def run():
-            result = yield from anon.authenticate(
+        async def run():
+            await anon.authenticate(
                 smmock,
                 "ANONYMOUS")
-            self.assertTrue(result)
 
-        asyncio.get_event_loop().run_until_complete(run())
+        run_coroutine(run())
 
         smmock.interface.finalize()
 
@@ -1288,13 +1276,12 @@ class TestANONYMOUS(unittest.TestCase):
                  None)
             ]))
 
-        def run():
+        async def run():
             anon = aiosasl.ANONYMOUS("sirhc")
-            result = yield from anon.authenticate(
+            await anon.authenticate(
                 smmock,
                 "ANONYMOUS")
-            self.assertTrue(result)
 
-        asyncio.get_event_loop().run_until_complete(run())
+        run_coroutine(run())
 
         smmock.interface.finalize()

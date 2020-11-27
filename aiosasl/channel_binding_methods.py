@@ -34,6 +34,12 @@ interface for use with :mod:`ssl` respective :mod:`OpenSSL`.
 .. autoclass:: TLSServerEndPoint
 """
 import functools
+import ssl
+
+try:
+    import OpenSSL  # for mypy
+except ImportError:
+    pass
 
 from . import ChannelBindingProvider
 
@@ -48,17 +54,20 @@ class StdlibTLS(ChannelBindingProvider):
     :type type_: :class:`str`
     """
 
-    def __init__(self, connection, type_):
+    def __init__(
+            self,
+            connection: ssl.SSLSocket,
+            type_: str):
         super().__init__()
         self._connection = connection
         self._type = type_
 
     @property
-    def cb_name(self):
+    def cb_name(self) -> bytes:
         return self._type.encode("us-ascii")
 
-    def extract_cb_data(self):
-        return self._connection.get_channel_binding(self._type)
+    def extract_cb_data(self) -> bytes:
+        return self._connection.get_channel_binding(self._type)  # type:ignore
 
 
 class TLSUnique(ChannelBindingProvider):
@@ -75,19 +84,21 @@ class TLSUnique(ChannelBindingProvider):
     :type connection: :class:`OpenSSL.SSL.Connection`
     """
 
-    def __init__(self, connection):
+    def __init__(self, connection: "OpenSSL.SSL.Connection"):
         super().__init__()
         self._connection = connection
 
     @property
-    def cb_name(self):
+    def cb_name(self) -> bytes:
         return b"tls-unique"
 
-    def extract_cb_data(self):
+    def extract_cb_data(self) -> bytes:
         return self._connection.get_finished()
 
 
-def parse_openssl_digest(digest):
+def parse_openssl_digest(
+        digest: bytes,
+        ) -> bytes:
     return bytes(map(functools.partial(int, base=16), digest.split(b":")))
 
 
@@ -100,15 +111,17 @@ class TLSServerEndPoint(ChannelBindingProvider):
     :type connection: :class:`OpenSSL.SSL.Connection`
     """
 
-    def __init__(self, connection):
+    def __init__(
+            self,
+            connection: "OpenSSL.SSL.Connection"):
         super().__init__()
         self._connection = connection
 
     @property
-    def cb_name(self):
+    def cb_name(self) -> bytes:
         return b"tls-server-end-point"
 
-    def extract_cb_data(self):
+    def extract_cb_data(self) -> bytes:
         cert = self._connection.get_peer_certificate()
         algo, part, _ = cert.get_signature_algorithm().lower().partition(
             b"with")
