@@ -46,6 +46,9 @@ jobs:
           python -m flake8 aiosasl tests
 
   test:
+    needs:
+    - mypy
+    - linting
     runs-on: ubuntu-latest
 
     strategy:
