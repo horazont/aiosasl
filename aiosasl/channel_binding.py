@@ -1,5 +1,5 @@
 ########################################################################
-# File name: channel_binding_methods.py
+# File name: channel_binding.py
 # This file is part of: aiosasl
 #
 # LICENSE
@@ -23,9 +23,11 @@
 Channel binding methods
 =======================
 
-The module :mod:`aiosasl.channel_binding_methods` provides
-implementations of the :class:`~aiosasl.ChannelBindingProvider`
+The module :mod:`aiosasl.channel_binding` provides
+implementations of the :class:`~.ChannelBindingProvider`
 interface for use with :mod:`ssl` respective :mod:`OpenSSL`.
+
+.. autoclass:: ChannelBindingProvider
 
 .. autoclass:: StdlibTLS
 
@@ -33,6 +35,7 @@ interface for use with :mod:`ssl` respective :mod:`OpenSSL`.
 
 .. autoclass:: TLSServerEndPoint
 """
+import abc
 import functools
 import ssl
 
@@ -41,7 +44,31 @@ try:
 except ImportError:
     pass
 
-from . import ChannelBindingProvider
+
+class ChannelBindingProvider(metaclass=abc.ABCMeta):
+    """
+    Interface for a channel binding method.
+
+    The needed external information is supplied to the constructors of
+    the specific instances.
+    """
+
+    @abc.abstractproperty
+    def cb_name(self) -> bytes:
+        """
+        Return the name of the channel-binding mechanism.
+        :rtype: :class:`bytes`
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def extract_cb_data(self) -> bytes:
+        """
+        Return the channel binding data.
+        :returns: the channel binding data
+        :rtype: :class:`bytes`
+        """
+        raise NotImplementedError
 
 
 class StdlibTLS(ChannelBindingProvider):

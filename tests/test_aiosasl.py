@@ -27,8 +27,9 @@ import unittest
 import unittest.mock
 
 import aiosasl
+import aiosasl.scram
 
-from aiosasl.channel_binding_methods import TLSUnique
+from aiosasl.channel_binding import TLSUnique
 from aiosasl.utils import xor_bytes
 
 
@@ -555,26 +556,25 @@ class TestSCRAMImpl:
         self.password = b"pencil"
         self.salt = b"QSXCR+Q6sek8bf92"
 
-        aiosasl._system_random = unittest.mock.MagicMock()
-        aiosasl._system_random.getrandbits.return_value = int.from_bytes(
-            b"foo",
-            "little")
+        aiosasl.scram._system_random = unittest.mock.MagicMock()
+        aiosasl.scram._system_random.getrandbits.return_value = \
+            int.from_bytes(b"foo", "little")
 
-        self.salted_password = aiosasl.pbkdf2(
+        self.salted_password = hashlib.pbkdf2_hmac(
             "sha1",
             self.password,
             self.salt,
             4096,
             self.digest_size)
 
-        self.salted_password_4000 = aiosasl.pbkdf2(
+        self.salted_password_4000 = hashlib.pbkdf2_hmac(
             "sha1",
             self.password,
             self.salt,
             4000,
             self.digest_size)
 
-        self.salted_password_5000 = aiosasl.pbkdf2(
+        self.salted_password_5000 = hashlib.pbkdf2_hmac(
             "sha1",
             self.password,
             self.salt,
@@ -726,7 +726,7 @@ class TestSCRAMImpl:
         return ("user", "pencil")
 
     def _run(self, smmock, scram):
-        info = aiosasl.SCRAMBase._supported_hashalgos["SHA-1"]
+        info = aiosasl.scram.Base._supported_hashalgos["SHA-1"]
         if self._scram_plus in ('no', 'supported'):
             token = ("SCRAM-SHA-1", info)
         else:
@@ -740,7 +740,7 @@ class TestSCRAMImpl:
 
     def tearDown(self):
         import random
-        aiosasl._system_random = random.SystemRandom()
+        aiosasl.scram._system_random = random.SystemRandom()
 
 
 class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
@@ -1241,7 +1241,7 @@ class TestANONYMOUS(unittest.TestCase):
         )
 
     def test_passes_token_through_trace(self):
-        with unittest.mock.patch("aiosasl.trace") as trace:
+        with unittest.mock.patch("aiosasl.stringprep.trace") as trace:
             trace.return_value = "traced"
 
             anon = aiosasl.ANONYMOUS(unittest.mock.sentinel.token)
