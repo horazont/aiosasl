@@ -1,8 +1,6 @@
 ``aiosasl``, pure python generic asyncio SASL library
 #####################################################
 
-![CI](https://github.com/horazont/aiosasl/workflows/CI/badge.svg)
-
 .. image:: https://github.com/horazont/aiosasl/workflows/CI/badge.svg
   :target: https://github.com/horazont/aiosasl/actions?query=workflow%3ACI+branch%3Adevel
 
