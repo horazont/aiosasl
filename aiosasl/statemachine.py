@@ -20,7 +20,6 @@
 #
 ########################################################################
 import abc
-import enum
 import typing
 
 from . import common
@@ -196,8 +195,8 @@ class SASLStateMachine:
         next_state = common.SASLState.from_reply(next_state)
 
         # unfold the (SASLState.SUCCESS, payload) to a sequence of
-        # (SASLState.CHALLENGE, payload), (SASLState.SUCCESS, None) for the SASLMethod
-        # to allow uniform treatment of both cases
+        # (SASLState.CHALLENGE, payload), (SASLState.SUCCESS, None) for the
+        # SASLMethod to allow uniform treatment of both cases
         if (next_state == common.SASLState.SUCCESS and
                 response_payload is not None):
             self._state = common.SASLState.SUCCESS_SIMULATE_CHALLENGE

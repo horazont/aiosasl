@@ -374,7 +374,10 @@ class TestPLAIN(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             run_coroutine(
-                aiosasl.PLAIN(provide_credentials).authenticate(smmock, "PLAIN")
+                aiosasl.PLAIN(provide_credentials).authenticate(
+                    smmock,
+                    "PLAIN",
+                )
             )
 
     def test_does_not_apply_saslprep(self):
@@ -525,8 +528,10 @@ class TestSCRAMNegotiation(unittest.TestCase):
             list(aiosasl.SCRAMPLUS.parse_message(b"m=bar"))
 
     def test_parse_message_unescape_n_and_a_payload_SCRAM(self):
-        data = list(aiosasl.SCRAM.parse_message(b"n=foo=2Cbar=3Dbaz,"
-                                             b"a=fnord=2Cfunky=3Dfunk"))
+        data = list(aiosasl.SCRAM.parse_message(
+            b"n=foo=2Cbar=3Dbaz,"
+            b"a=fnord=2Cfunky=3Dfunk",
+        ))
         self.assertSequenceEqual(
             [
                 (b"n", b"foo,bar=baz"),
@@ -756,7 +761,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(self.server_signature))
             ]))
@@ -790,7 +795,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof2),
+                 b",p="+base64.b64encode(self.client_proof2),
                  "success",
                  b"v="+base64.b64encode(self.server_signature2))
             ]))
@@ -870,7 +875,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(b"fnord"))
             ]))
@@ -894,7 +899,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "failure",
                  ("credentials-expired", None))
             ]))
@@ -917,7 +922,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  None),
             ]))
@@ -984,7 +989,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message_4000),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof_4000),
+                 b",p="+base64.b64encode(self.client_proof_4000),
                  "success",
                  b"v="+base64.b64encode(self.server_signature_4000))
             ]))
@@ -1007,7 +1012,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message_5000),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof_5000),
+                 b",p="+base64.b64encode(self.client_proof_5000),
                  "success",
                  b"v="+base64.b64encode(self.server_signature_5000))
             ]))
@@ -1031,7 +1036,7 @@ class TestSCRAMDowngradeProtection(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(self.server_signature))
             ]))
@@ -1055,7 +1060,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(self.server_signature))
             ]))
@@ -1153,7 +1158,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(b"fnord"))
             ]))
@@ -1183,7 +1188,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "failure",
                  ("credentials-expired", None))
             ]))
@@ -1212,7 +1217,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "challenge",
                  b"foo"),
                 ("response", b"", "success", b"bar")

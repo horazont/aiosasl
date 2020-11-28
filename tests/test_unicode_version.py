@@ -22,9 +22,12 @@
 
 import unittest
 
-from aiosasl import stringprep
+import aiosasl.stringprep
+
 
 class TestUnicodeVersion(unittest.TestCase):
-
     def test_version(self):
-        self.assertEqual(stringprep.unicodedata.unidata_version, "3.2.0")
+        self.assertEqual(
+            aiosasl.stringprep.unicodedata.unidata_version,
+            "3.2.0",
+        )

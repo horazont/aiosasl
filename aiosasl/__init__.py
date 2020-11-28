@@ -19,7 +19,7 @@
 # <http://www.gnu.org/licenses/>.
 #
 ########################################################################
-"""
+"""  # NOQA
 Using SASL in a protocol
 ========================
 
@@ -125,33 +125,33 @@ Version information
 .. autodata:: version_info
 """
 
-from .common import (
+from .common import (  # noqa:F401
     AuthenticationFailure,
     SASLError,
     SASLFailure,
     SASLState,
 )
 
-from .statemachine import (
+from .statemachine import (  # noqa:F401
     SASLInterface,
     SASLMechanism,
     SASLStateMachine,
 )
 
-from .scram import (
+from .scram import (  # noqa:F401
     SCRAM,
     SCRAMPLUS,
 )
 
-from .plain import (
+from .plain import (  # noqa:F401
     PLAIN,
 )
 
-from .anonymous import (
+from .anonymous import (  # noqa:F401
     ANONYMOUS,
 )
 
-from .version import version, __version__, version_info  # NOQA
+from .version import version, __version__, version_info  # noqa:F401
 
 #: The imported :mod:`aiosasl` version as a tuple.
 #:
