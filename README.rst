@@ -1,8 +1,10 @@
 ``aiosasl``, pure python generic asyncio SASL library
 #####################################################
 
-.. image:: https://travis-ci.com/horazont/aiosasl.svg?branch=devel
-  :target: https://travis-ci.com/horazont/aiosasl
+![CI](https://github.com/horazont/aiosasl/workflows/CI/badge.svg)
+
+.. image:: https://github.com/horazont/aiosasl/workflows/CI/badge.svg
+  :target: https://github.com/horazont/aiosasl/actions?query=workflow%3ACI+branch%3Adevel
 
 .. image:: https://coveralls.io/repos/github/horazont/aiosasl/badge.svg?branch=devel
   :target: https://coveralls.io/github/horazont/aiosasl?branch=devel
@@ -14,7 +16,7 @@ application or protocol implementation.
 Dependencies
 ------------
 
-* Python ≥ 3.4 (or Python = 3.3 with tulip)
+* Python ≥ 3.5
 
 Supported SASL mechanisms
 -------------------------
