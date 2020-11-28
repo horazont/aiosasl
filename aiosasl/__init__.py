@@ -519,7 +519,7 @@ class SASLMechanism(metaclass=abc.ABCMeta):
     @abc.abstractclassmethod
     def any_supported(
             cls,
-            mechanisms: typing.Collection[str],
+            mechanisms: typing.Iterable[str],
             ) -> typing.Any:
         """
         Determine whether this class can perform any SASL mechanism in the set
@@ -581,7 +581,7 @@ class PLAIN(SASLMechanism):
     @classmethod
     def any_supported(
             cls,
-            mechanisms: typing.Collection[str],
+            mechanisms: typing.Iterable[str],
             ) -> typing.Any:
         if "PLAIN" in mechanisms:
             return "PLAIN"
@@ -653,7 +653,7 @@ class SCRAMBase:
     @classmethod
     def any_supported(
             cls,
-            mechanisms: typing.Collection[str],
+            mechanisms: typing.Iterable[str],
             ) -> typing.Optional[typing.Tuple[str, SCRAMHashInfo]]:
         supported = []
         for mechanism in mechanisms:
@@ -1004,7 +1004,7 @@ class ANONYMOUS(SASLMechanism):
     @classmethod
     def any_supported(
             self,
-            mechanisms: typing.Collection[str],
+            mechanisms: typing.Iterable[str],
             ) -> typing.Optional[str]:
         if "ANONYMOUS" in mechanisms:
             return "ANONYMOUS"
