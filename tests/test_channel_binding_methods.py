@@ -25,8 +25,8 @@ import unittest.mock
 
 import OpenSSL
 
-from aiosasl import ChannelBindingProvider
-from aiosasl.channel_binding_methods import (
+from aiosasl.channel_binding import (
+    ChannelBindingProvider,
     StdlibTLS,
     TLSUnique,
     TLSServerEndPoint,

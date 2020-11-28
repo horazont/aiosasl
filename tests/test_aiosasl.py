@@ -27,8 +27,9 @@ import unittest
 import unittest.mock
 
 import aiosasl
+import aiosasl.scram
 
-from aiosasl.channel_binding_methods import TLSUnique
+from aiosasl.channel_binding import TLSUnique
 from aiosasl.utils import xor_bytes
 
 
@@ -373,7 +374,10 @@ class TestPLAIN(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             run_coroutine(
-                aiosasl.PLAIN(provide_credentials).authenticate(smmock, "PLAIN")
+                aiosasl.PLAIN(provide_credentials).authenticate(
+                    smmock,
+                    "PLAIN",
+                )
             )
 
     def test_does_not_apply_saslprep(self):
@@ -524,8 +528,10 @@ class TestSCRAMNegotiation(unittest.TestCase):
             list(aiosasl.SCRAMPLUS.parse_message(b"m=bar"))
 
     def test_parse_message_unescape_n_and_a_payload_SCRAM(self):
-        data = list(aiosasl.SCRAM.parse_message(b"n=foo=2Cbar=3Dbaz,"
-                                             b"a=fnord=2Cfunky=3Dfunk"))
+        data = list(aiosasl.SCRAM.parse_message(
+            b"n=foo=2Cbar=3Dbaz,"
+            b"a=fnord=2Cfunky=3Dfunk",
+        ))
         self.assertSequenceEqual(
             [
                 (b"n", b"foo,bar=baz"),
@@ -555,26 +561,25 @@ class TestSCRAMImpl:
         self.password = b"pencil"
         self.salt = b"QSXCR+Q6sek8bf92"
 
-        aiosasl._system_random = unittest.mock.MagicMock()
-        aiosasl._system_random.getrandbits.return_value = int.from_bytes(
-            b"foo",
-            "little")
+        aiosasl.scram._system_random = unittest.mock.MagicMock()
+        aiosasl.scram._system_random.getrandbits.return_value = \
+            int.from_bytes(b"foo", "little")
 
-        self.salted_password = aiosasl.pbkdf2(
+        self.salted_password = hashlib.pbkdf2_hmac(
             "sha1",
             self.password,
             self.salt,
             4096,
             self.digest_size)
 
-        self.salted_password_4000 = aiosasl.pbkdf2(
+        self.salted_password_4000 = hashlib.pbkdf2_hmac(
             "sha1",
             self.password,
             self.salt,
             4000,
             self.digest_size)
 
-        self.salted_password_5000 = aiosasl.pbkdf2(
+        self.salted_password_5000 = hashlib.pbkdf2_hmac(
             "sha1",
             self.password,
             self.salt,
@@ -726,7 +731,7 @@ class TestSCRAMImpl:
         return ("user", "pencil")
 
     def _run(self, smmock, scram):
-        info = aiosasl.SCRAMBase._supported_hashalgos["SHA-1"]
+        info = aiosasl.scram.Base._supported_hashalgos["SHA-1"]
         if self._scram_plus in ('no', 'supported'):
             token = ("SCRAM-SHA-1", info)
         else:
@@ -740,7 +745,7 @@ class TestSCRAMImpl:
 
     def tearDown(self):
         import random
-        aiosasl._system_random = random.SystemRandom()
+        aiosasl.scram._system_random = random.SystemRandom()
 
 
 class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
@@ -756,7 +761,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(self.server_signature))
             ]))
@@ -790,7 +795,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof2),
+                 b",p="+base64.b64encode(self.client_proof2),
                  "success",
                  b"v="+base64.b64encode(self.server_signature2))
             ]))
@@ -870,7 +875,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(b"fnord"))
             ]))
@@ -894,7 +899,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "failure",
                  ("credentials-expired", None))
             ]))
@@ -917,7 +922,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  None),
             ]))
@@ -984,7 +989,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message_4000),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof_4000),
+                 b",p="+base64.b64encode(self.client_proof_4000),
                  "success",
                  b"v="+base64.b64encode(self.server_signature_4000))
             ]))
@@ -1007,7 +1012,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message_5000),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof_5000),
+                 b",p="+base64.b64encode(self.client_proof_5000),
                  "success",
                  b"v="+base64.b64encode(self.server_signature_5000))
             ]))
@@ -1031,7 +1036,7 @@ class TestSCRAMDowngradeProtection(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(self.server_signature))
             ]))
@@ -1055,7 +1060,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(self.server_signature))
             ]))
@@ -1153,7 +1158,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(b"fnord"))
             ]))
@@ -1183,7 +1188,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "failure",
                  ("credentials-expired", None))
             ]))
@@ -1212,7 +1217,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "challenge",
                  b"foo"),
                 ("response", b"", "success", b"bar")
@@ -1241,7 +1246,7 @@ class TestANONYMOUS(unittest.TestCase):
         )
 
     def test_passes_token_through_trace(self):
-        with unittest.mock.patch("aiosasl.trace") as trace:
+        with unittest.mock.patch("aiosasl.stringprep.trace") as trace:
             trace.return_value = "traced"
 
             anon = aiosasl.ANONYMOUS(unittest.mock.sentinel.token)
