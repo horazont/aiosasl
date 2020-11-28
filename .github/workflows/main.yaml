@@ -1,28 +1,81 @@
 name: CI
 
 on:
-  # Triggers the workflow on push or pull request events but only for the devel branch
   push:
     branches: [ devel ]
   pull_request:
     branches: [ devel ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   mypy:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+    name: 'Typecheck'
 
-      - name: type check
-        uses: jpetrucciani/mypy-check@0.761
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
         with:
-          path: 'aiosasl'
+          python-version: '3.7'
+      - name: Install
+        run: |
+          set -euo pipefail
+          pip install mypy
+          pip install .
+      - name: Typecheck
+        run: |
+          python -m mypy --config mypy.ini -p aiosasl
+
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version:
+        - '3.5'
+        - '3.6'
+        - '3.7'
+        - '3.8'
+        - '3.9'
+
+    name: 'Unit tests with Python ${{ matrix.python-version }}'
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '${{ matrix.python-version }}'
+      - name: Install
+        run: |
+          set -euo pipefail
+          pip install nose coveralls pyOpenSSL
+          pip install .
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          python -m nose --with-cover --cover-package aiosasl tests
+      - name: Submit to Coveralls
+        run: |
+          set -euo pipefail
+          coveralls
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COVERALLS_FLAG_NAME: python-${{ matrix.python-version }}
+          COVERALLS_PARALLEL: true
+
+  finish:
+    needs: test
+    runs-on: ubuntu-latest
+    name: Finalize
+    steps:
+    - uses: actions/setup-python@v2
+      with:
+        python-version: '3.7'
+    - name: Finalize Coveralls interaction
+      run: |
+        set -euo pipefail
+        pip install coveralls
+        coveralls --finish
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
