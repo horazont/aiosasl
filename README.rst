@@ -28,7 +28,7 @@ Documentation
 -------------
 
 Official documentation can be built with sphinx and is available online
-`on our servers <https://docs.zombofant.net/aiosasl/devel/>`_.
+`on our servers <https://docs.zombofant.net/aiosasl/0.5/>`_.
 
 Supported channel binding methods
 ---------------------------------
