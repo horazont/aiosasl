@@ -19,7 +19,7 @@
 # <http://www.gnu.org/licenses/>.
 #
 ########################################################################
-"""  # NOQA
+"""
 Using SASL in a protocol
 ========================
 
@@ -123,7 +123,7 @@ Version information
 .. autodata:: __version__
 
 .. autodata:: version_info
-"""
+"""  # NOQA
 
 from .common import (  # noqa:F401
     AuthenticationFailure,
