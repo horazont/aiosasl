@@ -23,7 +23,7 @@
 import operator
 
 
-def xor_bytes(a, b):
+def xor_bytes(a: bytes, b: bytes) -> bytes:
     """
     Calculate the byte wise exclusive of of two :class:`bytes` objects
     of the same length.

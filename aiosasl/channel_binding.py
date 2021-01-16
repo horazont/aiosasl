@@ -1,5 +1,5 @@
 ########################################################################
-# File name: channel_binding_methods.py
+# File name: channel_binding.py
 # This file is part of: aiosasl
 #
 # LICENSE
@@ -23,9 +23,11 @@
 Channel binding methods
 =======================
 
-The module :mod:`aiosasl.channel_binding_methods` provides
-implementations of the :class:`~aiosasl.ChannelBindingProvider`
+The module :mod:`aiosasl.channel_binding` provides
+implementations of the :class:`~.ChannelBindingProvider`
 interface for use with :mod:`ssl` respective :mod:`OpenSSL`.
+
+.. autoclass:: ChannelBindingProvider
 
 .. autoclass:: StdlibTLS
 
@@ -33,9 +35,40 @@ interface for use with :mod:`ssl` respective :mod:`OpenSSL`.
 
 .. autoclass:: TLSServerEndPoint
 """
+import abc
 import functools
+import ssl
 
-from . import ChannelBindingProvider
+try:
+    import OpenSSL  # for mypy
+except ImportError:
+    pass
+
+
+class ChannelBindingProvider(metaclass=abc.ABCMeta):
+    """
+    Interface for a channel binding method.
+
+    The needed external information is supplied to the constructors of
+    the specific instances.
+    """
+
+    @abc.abstractproperty
+    def cb_name(self) -> bytes:
+        """
+        Return the name of the channel-binding mechanism.
+        :rtype: :class:`bytes`
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def extract_cb_data(self) -> bytes:
+        """
+        Return the channel binding data.
+        :returns: the channel binding data
+        :rtype: :class:`bytes`
+        """
+        raise NotImplementedError
 
 
 class StdlibTLS(ChannelBindingProvider):
@@ -48,17 +81,20 @@ class StdlibTLS(ChannelBindingProvider):
     :type type_: :class:`str`
     """
 
-    def __init__(self, connection, type_):
+    def __init__(
+            self,
+            connection: ssl.SSLSocket,
+            type_: str):
         super().__init__()
         self._connection = connection
         self._type = type_
 
     @property
-    def cb_name(self):
+    def cb_name(self) -> bytes:
         return self._type.encode("us-ascii")
 
-    def extract_cb_data(self):
-        return self._connection.get_channel_binding(self._type)
+    def extract_cb_data(self) -> bytes:
+        return self._connection.get_channel_binding(self._type)  # type:ignore
 
 
 class TLSUnique(ChannelBindingProvider):
@@ -75,19 +111,21 @@ class TLSUnique(ChannelBindingProvider):
     :type connection: :class:`OpenSSL.SSL.Connection`
     """
 
-    def __init__(self, connection):
+    def __init__(self, connection: "OpenSSL.SSL.Connection"):
         super().__init__()
         self._connection = connection
 
     @property
-    def cb_name(self):
+    def cb_name(self) -> bytes:
         return b"tls-unique"
 
-    def extract_cb_data(self):
+    def extract_cb_data(self) -> bytes:
         return self._connection.get_finished()
 
 
-def parse_openssl_digest(digest):
+def parse_openssl_digest(
+        digest: bytes,
+        ) -> bytes:
     return bytes(map(functools.partial(int, base=16), digest.split(b":")))
 
 
@@ -100,15 +138,17 @@ class TLSServerEndPoint(ChannelBindingProvider):
     :type connection: :class:`OpenSSL.SSL.Connection`
     """
 
-    def __init__(self, connection):
+    def __init__(
+            self,
+            connection: "OpenSSL.SSL.Connection"):
         super().__init__()
         self._connection = connection
 
     @property
-    def cb_name(self):
+    def cb_name(self) -> bytes:
         return b"tls-server-end-point"
 
-    def extract_cb_data(self):
+    def extract_cb_data(self) -> bytes:
         cert = self._connection.get_peer_certificate()
         algo, part, _ = cert.get_signature_algorithm().lower().partition(
             b"with")

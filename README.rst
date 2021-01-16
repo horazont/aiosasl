@@ -1,8 +1,8 @@
 ``aiosasl``, pure python generic asyncio SASL library
 #####################################################
 
-.. image:: https://travis-ci.com/horazont/aiosasl.svg?branch=devel
-  :target: https://travis-ci.com/horazont/aiosasl
+.. image:: https://github.com/horazont/aiosasl/workflows/CI/badge.svg
+  :target: https://github.com/horazont/aiosasl/actions?query=workflow%3ACI+branch%3Adevel
 
 .. image:: https://coveralls.io/repos/github/horazont/aiosasl/badge.svg?branch=devel
   :target: https://coveralls.io/github/horazont/aiosasl?branch=devel
@@ -14,7 +14,7 @@ application or protocol implementation.
 Dependencies
 ------------
 
-* Python ≥ 3.4 (or Python = 3.3 with tulip)
+* Python ≥ 3.5
 
 Supported SASL mechanisms
 -------------------------
@@ -28,7 +28,7 @@ Documentation
 -------------
 
 Official documentation can be built with sphinx and is available online
-`on our servers <https://docs.zombofant.net/aiosasl/0.4/>`_.
+`on our servers <https://docs.zombofant.net/aiosasl/0.5/>`_.
 
 Supported channel binding methods
 ---------------------------------

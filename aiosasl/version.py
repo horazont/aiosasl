@@ -19,9 +19,12 @@
 # <http://www.gnu.org/licenses/>.
 #
 ########################################################################
-version_info = (0, 4, 1, None)
+version_info = (0, 5, 0, None)
 
-__version__ = ".".join(map(str, version_info[:3])) + ("-"+version_info[3] if
-                                                      version_info[3] else "")
+__version__ = ".".join(map(str, version_info[:3])) + (
+    "-"+version_info[3]  # type:ignore
+    if version_info[3] is not None  # type:ignore
+    else ""
+)
 
 version = __version__

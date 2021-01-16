@@ -27,8 +27,9 @@ import unittest
 import unittest.mock
 
 import aiosasl
+import aiosasl.scram
 
-from aiosasl.channel_binding_methods import TLSUnique
+from aiosasl.channel_binding import TLSUnique
 from aiosasl.utils import xor_bytes
 
 
@@ -91,16 +92,13 @@ class SASLInterfaceMock(aiosasl.SASLInterface):
 
         return new_state, result_payload
 
-    @asyncio.coroutine
-    def initiate(self, mechanism, payload=None):
+    async def initiate(self, mechanism, payload=None):
         return self._check_action("auth;"+mechanism, payload)
 
-    @asyncio.coroutine
-    def respond(self, payload):
+    async def respond(self, payload):
         return self._check_action("response", payload)
 
-    @asyncio.coroutine
-    def abort(self):
+    async def abort(self):
         return self._check_action("abort", None)
 
     def finalize(self):
@@ -302,16 +300,15 @@ class TestPLAIN(unittest.TestCase):
                  None)
             ]))
 
-        @asyncio.coroutine
-        def provide_credentials(*args):
+        async def provide_credentials(*args):
             return user, password
 
-        def run():
+        async def run():
             plain = aiosasl.PLAIN(provide_credentials)
-            result = yield from plain.authenticate(
+            await plain.authenticate(
                 smmock,
-                "PLAIN")
-            self.assertTrue(result)
+                "PLAIN",
+            )
 
         asyncio.get_event_loop().run_until_complete(run())
 
@@ -330,13 +327,12 @@ class TestPLAIN(unittest.TestCase):
                  b"foo")
             ]))
 
-        @asyncio.coroutine
-        def provide_credentials(*args):
+        async def provide_credentials(*args):
             return user, password
 
-        def run():
+        async def run():
             plain = aiosasl.PLAIN(provide_credentials)
-            yield from plain.authenticate(
+            await plain.authenticate(
                 smmock,
                 "PLAIN")
 
@@ -357,8 +353,7 @@ class TestPLAIN(unittest.TestCase):
             [
             ]))
 
-        @asyncio.coroutine
-        def provide_credentials(*args):
+        async def provide_credentials(*args):
             return "\0", "foo"
 
         with self.assertRaises(ValueError):
@@ -374,14 +369,43 @@ class TestPLAIN(unittest.TestCase):
             [
             ]))
 
-        @asyncio.coroutine
-        def provide_credentials(*args):
+        async def provide_credentials(*args):
             return "foo", "\0"
 
         with self.assertRaises(ValueError):
             run_coroutine(
-                aiosasl.PLAIN(provide_credentials).authenticate(smmock, "PLAIN")
+                aiosasl.PLAIN(provide_credentials).authenticate(
+                    smmock,
+                    "PLAIN",
+                )
             )
+
+    def test_does_not_apply_saslprep(self):
+        user = "tim"
+        password = "2ø'±s;ßà¼Å"
+
+        smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
+            self,
+            [
+                ("auth;PLAIN",
+                 b"\0tim\0" + password.encode("utf-8"),
+                 "success",
+                 None)
+            ]))
+
+        async def provide_credentials(*args):
+            return user, password
+
+        async def run():
+            plain = aiosasl.PLAIN(provide_credentials)
+            await plain.authenticate(
+                smmock,
+                "PLAIN",
+            )
+
+        asyncio.get_event_loop().run_until_complete(run())
+
+        smmock.interface.finalize()
 
     def test_supports_PLAIN(self):
         self.assertEqual(
@@ -504,8 +528,10 @@ class TestSCRAMNegotiation(unittest.TestCase):
             list(aiosasl.SCRAMPLUS.parse_message(b"m=bar"))
 
     def test_parse_message_unescape_n_and_a_payload_SCRAM(self):
-        data = list(aiosasl.SCRAM.parse_message(b"n=foo=2Cbar=3Dbaz,"
-                                             b"a=fnord=2Cfunky=3Dfunk"))
+        data = list(aiosasl.SCRAM.parse_message(
+            b"n=foo=2Cbar=3Dbaz,"
+            b"a=fnord=2Cfunky=3Dfunk",
+        ))
         self.assertSequenceEqual(
             [
                 (b"n", b"foo,bar=baz"),
@@ -531,29 +557,29 @@ class TestSCRAMImpl:
         self.hashfun_factory = hashlib.sha1
         self.digest_size = self.hashfun_factory().digest_size
         self.user = b"user"
+        self.user2 = "user\U0001f916".encode("utf-8")
         self.password = b"pencil"
         self.salt = b"QSXCR+Q6sek8bf92"
 
-        aiosasl._system_random = unittest.mock.MagicMock()
-        aiosasl._system_random.getrandbits.return_value = int.from_bytes(
-            b"foo",
-            "little")
+        aiosasl.scram._system_random = unittest.mock.MagicMock()
+        aiosasl.scram._system_random.getrandbits.return_value = \
+            int.from_bytes(b"foo", "little")
 
-        self.salted_password = aiosasl.pbkdf2(
+        self.salted_password = hashlib.pbkdf2_hmac(
             "sha1",
             self.password,
             self.salt,
             4096,
             self.digest_size)
 
-        self.salted_password_4000 = aiosasl.pbkdf2(
+        self.salted_password_4000 = hashlib.pbkdf2_hmac(
             "sha1",
             self.password,
             self.salt,
             4000,
             self.digest_size)
 
-        self.salted_password_5000 = aiosasl.pbkdf2(
+        self.salted_password_5000 = hashlib.pbkdf2_hmac(
             "sha1",
             self.password,
             self.salt,
@@ -585,6 +611,8 @@ class TestSCRAMImpl:
             self.client_key_5000).digest()
 
         self.client_first_message_bare = b"n=user,r=Zm9vAAAAAAAAAAAAAAAA"
+        self.client_first_message_bare2 = \
+            b"n="+self.user2+b",r=Zm9vAAAAAAAAAAAAAAAA"
         self.server_first_message = b"".join([
             b"r=Zm9vAAAAAAAAAAAAAAAA3rfcNHYJY1ZVvWVs7j,s=",
             base64.b64encode(self.salt),
@@ -620,6 +648,12 @@ class TestSCRAMImpl:
             self.client_final_message_without_proof
         ])
 
+        self.auth_message2 = b",".join([
+            self.client_first_message_bare2,
+            self.server_first_message,
+            self.client_final_message_without_proof
+        ])
+
         self.auth_message_4000 = b",".join([
             self.client_first_message_bare,
             self.server_first_message_4000,
@@ -637,6 +671,11 @@ class TestSCRAMImpl:
             self.auth_message,
             self.hashfun_factory).digest()
 
+        self.client_signature2 = hmac.new(
+            self.stored_key,
+            self.auth_message2,
+            self.hashfun_factory).digest()
+
         self.client_signature_4000 = hmac.new(
             self.stored_key_4000,
             self.auth_message_4000,
@@ -648,6 +687,7 @@ class TestSCRAMImpl:
             self.hashfun_factory).digest()
 
         self.client_proof = xor_bytes(self.client_signature, self.client_key)
+        self.client_proof2 = xor_bytes(self.client_signature2, self.client_key)
         self.client_proof_4000 = xor_bytes(self.client_signature_4000,
                                            self.client_key_4000)
         self.client_proof_5000 = xor_bytes(self.client_signature_5000,
@@ -669,6 +709,10 @@ class TestSCRAMImpl:
             self.server_key,
             self.auth_message,
             self.hashfun_factory).digest()
+        self.server_signature2 = hmac.new(
+            self.server_key,
+            self.auth_message2,
+            self.hashfun_factory).digest()
         self.server_signature_4000 = hmac.new(
             self.server_key_4000,
             self.auth_message_4000,
@@ -683,12 +727,11 @@ class TestSCRAMImpl:
         self._tls_connection.get_finished.return_value = \
             b'channel binding data'
 
-    @asyncio.coroutine
-    def _provide_credentials(self, *args):
+    async def _provide_credentials(self, *args):
         return ("user", "pencil")
 
     def _run(self, smmock, scram):
-        info = aiosasl.SCRAMBase._supported_hashalgos["SHA-1"]
+        info = aiosasl.scram.Base._supported_hashalgos["SHA-1"]
         if self._scram_plus in ('no', 'supported'):
             token = ("SCRAM-SHA-1", info)
         else:
@@ -702,7 +745,7 @@ class TestSCRAMImpl:
 
     def tearDown(self):
         import random
-        aiosasl._system_random = random.SystemRandom()
+        aiosasl.scram._system_random = random.SystemRandom()
 
 
 class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
@@ -718,15 +761,52 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(self.server_signature))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(self._provide_credentials)
-        ))
+        )
+
+    def test_unassigned_password_codepoints(self):
+        smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
+            self,
+            []))
+
+        async def provide_credentials(*args):
+            return ("user", "\U0001f916")
+
+        with self.assertRaisesRegex(ValueError, "unassigned"):
+            self._run(
+                smmock,
+                aiosasl.SCRAM(provide_credentials)
+            )
+
+    def test_unassigned_username_codepoints(self):
+        smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
+            self,
+            [
+                ("auth;SCRAM-SHA-1",
+                 b"n,,"+self.client_first_message_bare2,
+                 "challenge",
+                 self.server_first_message),
+                ("response",
+                 self.client_final_message_without_proof +
+                 b",p="+base64.b64encode(self.client_proof2),
+                 "success",
+                 b"v="+base64.b64encode(self.server_signature2))
+            ]))
+
+        async def provide_credentials(*args):
+            return (self.user2.decode("utf-8"), self.password.decode("utf-8"))
+
+        self._run(
+            smmock,
+            aiosasl.SCRAM(provide_credentials)
+        )
 
     def test_malformed_reply(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
@@ -795,7 +875,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(b"fnord"))
             ]))
@@ -819,7 +899,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "failure",
                  ("credentials-expired", None))
             ]))
@@ -842,7 +922,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  None),
             ]))
@@ -909,18 +989,18 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message_4000),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof_4000),
+                 b",p="+base64.b64encode(self.client_proof_4000),
                  "success",
                  b"v="+base64.b64encode(self.server_signature_4000))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(
                 self._provide_credentials,
                 enforce_minimum_iteration_count=False,
             )
-        ))
+        )
 
     def test_high_iteration_count(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
@@ -932,15 +1012,15 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message_5000),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof_5000),
+                 b",p="+base64.b64encode(self.client_proof_5000),
                  "success",
                  b"v="+base64.b64encode(self.server_signature_5000))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(self._provide_credentials)
-        ))
+        )
 
 
 class TestSCRAMDowngradeProtection(TestSCRAMImpl, unittest.TestCase):
@@ -956,15 +1036,15 @@ class TestSCRAMDowngradeProtection(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(self.server_signature))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAM(self._provide_credentials, after_scram_plus=True)
-        ))
+        )
 
 
 class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
@@ -980,18 +1060,18 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(self.server_signature))
             ]))
 
-        self.assertTrue(self._run(
+        self._run(
             smmock,
             aiosasl.SCRAMPLUS(
                 self._provide_credentials,
                 TLSUnique(self._tls_connection)
             )
-        ))
+        )
 
     def test_malformed_reply(self):
         smmock = aiosasl.SASLStateMachine(SASLInterfaceMock(
@@ -1078,7 +1158,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "success",
                  b"v="+base64.b64encode(b"fnord"))
             ]))
@@ -1108,7 +1188,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "failure",
                  ("credentials-expired", None))
             ]))
@@ -1137,7 +1217,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  self.server_first_message),
                 ("response",
                  self.client_final_message_without_proof +
-                     b",p="+base64.b64encode(self.client_proof),
+                 b",p="+base64.b64encode(self.client_proof),
                  "challenge",
                  b"foo"),
                 ("response", b"", "success", b"bar")
@@ -1166,7 +1246,7 @@ class TestANONYMOUS(unittest.TestCase):
         )
 
     def test_passes_token_through_trace(self):
-        with unittest.mock.patch("aiosasl.trace") as trace:
+        with unittest.mock.patch("aiosasl.stringprep.trace") as trace:
             trace.return_value = "traced"
 
             anon = aiosasl.ANONYMOUS(unittest.mock.sentinel.token)
@@ -1182,13 +1262,12 @@ class TestANONYMOUS(unittest.TestCase):
                  None)
             ]))
 
-        def run():
-            result = yield from anon.authenticate(
+        async def run():
+            await anon.authenticate(
                 smmock,
                 "ANONYMOUS")
-            self.assertTrue(result)
 
-        asyncio.get_event_loop().run_until_complete(run())
+        run_coroutine(run())
 
         smmock.interface.finalize()
 
@@ -1202,13 +1281,12 @@ class TestANONYMOUS(unittest.TestCase):
                  None)
             ]))
 
-        def run():
+        async def run():
             anon = aiosasl.ANONYMOUS("sirhc")
-            result = yield from anon.authenticate(
+            await anon.authenticate(
                 smmock,
                 "ANONYMOUS")
-            self.assertTrue(result)
 
-        asyncio.get_event_loop().run_until_complete(run())
+        run_coroutine(run())
 
         smmock.interface.finalize()
