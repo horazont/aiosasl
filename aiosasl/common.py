@@ -141,13 +141,13 @@ class SASLState(enum.Enum):
         Comptaibility layer for old :class:`SASLInterface`
         implementations.
 
-        Accepts the follwing set of :class:`SASLState` or strings and
+        Accepts the following set of :class:`SASLState` or strings and
         maps the strings to :class:`SASLState` elements as follows:
 
           ``"challenge"``
             :member:`SASLState.CHALLENGE`
 
-           ``"failue"``
+           ``"failure"``
              :member:`SASLState.FAILURE`
 
            ``"success"``

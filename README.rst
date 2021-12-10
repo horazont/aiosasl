@@ -8,7 +8,7 @@
   :target: https://coveralls.io/github/horazont/aiosasl?branch=devel
 
 ``aiosasl`` provides a generic, asyncio-based SASL library. It can be used with
-any protocol, provided the neccessary interface code is provided by the
+any protocol, provided the necessary interface code is provided by the
 application or protocol implementation.
 
 Dependencies

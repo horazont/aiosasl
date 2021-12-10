@@ -77,7 +77,7 @@ To implement SASL on an existing protocol, you need to subclass
 
 .. autoclass:: SASLState
 
-SASL mechansims
+SASL mechanisms
 ===============
 
 .. autoclass:: PLAIN
