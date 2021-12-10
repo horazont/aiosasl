@@ -182,8 +182,8 @@ class TestSASLStateMachine(unittest.TestCase):
     def test_reject_double_initiate(self):
         run_coroutine(self.sm.initiate("foo", b"bar"))
 
-        with self.assertRaisesRegexp(RuntimeError,
-                                     "has already been called"):
+        with self.assertRaisesRegex(RuntimeError,
+                                    "has already been called"):
             run_coroutine(self.sm.initiate("foo"))
 
     def test_reject_double_initiate_after_error(self):
@@ -195,13 +195,13 @@ class TestSASLStateMachine(unittest.TestCase):
         with self.assertRaises(aiosasl.SASLFailure):
             run_coroutine(self.sm.initiate("foo", b"bar"))
 
-        with self.assertRaisesRegexp(RuntimeError,
-                                     "has already been called"):
+        with self.assertRaisesRegex(RuntimeError,
+                                    "has already been called"):
             run_coroutine(self.sm.initiate("foo"))
 
     def test_reject_response_without_challenge(self):
-        with self.assertRaisesRegexp(RuntimeError,
-                                     "no challenge"):
+        with self.assertRaisesRegex(RuntimeError,
+                                    "no challenge"):
             run_coroutine(self.sm.response(b"bar"))
 
     def test_response_calls_to_interface(self):
@@ -336,8 +336,8 @@ class TestPLAIN(unittest.TestCase):
                 smmock,
                 "PLAIN")
 
-        with self.assertRaisesRegexp(aiosasl.SASLFailure,
-                                     "protocol violation") as ctx:
+        with self.assertRaisesRegex(aiosasl.SASLFailure,
+                                    "protocol violation") as ctx:
             asyncio.get_event_loop().run_until_complete(run())
 
         self.assertEqual(
@@ -512,19 +512,19 @@ class TestSCRAMNegotiation(unittest.TestCase):
         )
 
     def test_parse_message_reject_long_keys_SCRAM(self):
-        with self.assertRaisesRegexp(Exception, "protocol violation"):
+        with self.assertRaisesRegex(Exception, "protocol violation"):
             list(aiosasl.SCRAM.parse_message(b"foo=bar"))
 
     def test_parse_message_reject_long_keys_SCRAMPLUS(self):
-        with self.assertRaisesRegexp(Exception, "protocol violation"):
+        with self.assertRaisesRegex(Exception, "protocol violation"):
             list(aiosasl.SCRAMPLUS.parse_message(b"foo=bar"))
 
     def test_parse_message_reject_m_key_SCRAM(self):
-        with self.assertRaisesRegexp(Exception, "protocol violation"):
+        with self.assertRaisesRegex(Exception, "protocol violation"):
             list(aiosasl.SCRAM.parse_message(b"m=bar"))
 
     def test_parse_message_reject_m_key_SCRAMPLUS(self):
-        with self.assertRaisesRegexp(Exception, "protocol violation"):
+        with self.assertRaisesRegex(Exception, "protocol violation"):
             list(aiosasl.SCRAMPLUS.parse_message(b"m=bar"))
 
     def test_parse_message_unescape_n_and_a_payload_SCRAM(self):
@@ -860,7 +860,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  "failure", ("aborted", None))
             ]))
 
-        with self.assertRaisesRegexp(aiosasl.SASLFailure, "nonce") as ctx:
+        with self.assertRaisesRegex(aiosasl.SASLFailure, "nonce") as ctx:
             self._run(smmock, aiosasl.SCRAM(self._provide_credentials))
 
         self.assertIsNone(ctx.exception.opaque_error)
@@ -927,8 +927,8 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  None),
             ]))
 
-        with self.assertRaisesRegexp(aiosasl.SASLFailure,
-                                     "protocol violation") as ctx:
+        with self.assertRaisesRegex(aiosasl.SASLFailure,
+                                    "protocol violation") as ctx:
             self._run(smmock, aiosasl.SCRAM(self._provide_credentials))
 
         self.assertEqual(
@@ -947,8 +947,8 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  "failure", ("aborted", None)),
             ]))
 
-        with self.assertRaisesRegexp(aiosasl.SASLFailure,
-                                     "protocol violation") as ctx:
+        with self.assertRaisesRegex(aiosasl.SASLFailure,
+                                    "protocol violation") as ctx:
             self._run(smmock, aiosasl.SCRAM(self._provide_credentials))
 
         self.assertEqual(
@@ -968,7 +968,7 @@ class TestSCRAM(TestSCRAMImpl, unittest.TestCase):
                  "failure", ("aborted", None)),
             ]))
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 aiosasl.SASLFailure,
                 r"minimum iteration count for SCRAM-SHA-1 violated "
                 r"\(4095 is less than 4096\)") as ctx:
@@ -1137,7 +1137,7 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                  "failure", ("aborted", None))
             ]))
 
-        with self.assertRaisesRegexp(aiosasl.SASLFailure, "nonce") as ctx:
+        with self.assertRaisesRegex(aiosasl.SASLFailure, "nonce") as ctx:
             self._run(
                 smmock,
                 aiosasl.SCRAMPLUS(
@@ -1223,8 +1223,8 @@ class TestSCRAMPLUS(TestSCRAMImpl, unittest.TestCase):
                 ("response", b"", "success", b"bar")
             ]))
 
-        with self.assertRaisesRegexp(aiosasl.SASLFailure,
-                                     "protocol violation") as ctx:
+        with self.assertRaisesRegex(aiosasl.SASLFailure,
+                                    "protocol violation") as ctx:
             self._run(
                 smmock,
                 aiosasl.SCRAMPLUS(
