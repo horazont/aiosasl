@@ -45,10 +45,9 @@ def run_coroutine(coroutine, timeout=1.0, loop=None):
 class CoroutineMock(unittest.mock.Mock):
     delay = 0
 
-    @asyncio.coroutine
-    def __call__(self, *args, **kwargs):
+    async def __call__(self, *args, **kwargs):
         result = super().__call__(*args, **kwargs)
-        yield from asyncio.sleep(self.delay)
+        await asyncio.sleep(self.delay)
         return result
 
 
