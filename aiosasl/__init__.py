@@ -151,6 +151,10 @@ from .anonymous import (  # noqa:F401
     ANONYMOUS,
 )
 
+from .oauthbearer import (  # noqa:F401
+    OAUTHBEARER,
+)
+
 from .version import version, __version__, version_info  # noqa:F401
 
 #: The imported :mod:`aiosasl` version as a tuple.
